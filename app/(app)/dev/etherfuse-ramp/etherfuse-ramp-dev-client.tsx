@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { AppPageBody } from '@/components/app/app-page-body'
@@ -19,8 +19,6 @@ import {
   extractConfirmedTxSignatureFromOnrampPanelJson,
   pickRampOrderTransactionDetails,
 } from '@/lib/etherfuse/orders-api'
-import { cn } from '@/lib/utils'
-import { useEffect } from 'react'
 import {
   type EtherfuseReadinessClientPayload,
   etherfuseDepositBlockedCopy,
