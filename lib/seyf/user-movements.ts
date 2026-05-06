@@ -1,5 +1,6 @@
 import {
   fetchCustomerOrdersAllPages,
+  fetchOrgOrdersAllPages,
   pickRampOrderTransactionDetails,
 } from "@/lib/etherfuse/orders-api";
 import type { InvestmentRun } from "@/lib/seyf/investment-mvp";
@@ -202,16 +203,28 @@ export async function fetchUserMovements(
     out.push(...runs.map(ledgerRunToMovement));
   }
 
-  if (ctx && etherfuseRampAllowed()) {
+  if (etherfuseRampAllowed()) {
     try {
-      const rows =
-        etherfusePages != null
-          ? await fetchCustomerOrdersAllPages(ctx.customerId, etherfusePages)
-          : await fetchCustomerOrdersAllPages(ctx.customerId);
+      let rows: Awaited<ReturnType<typeof fetchCustomerOrdersAllPages>> = [];
+      if (ctx) {
+        rows =
+          etherfusePages != null
+            ? await fetchCustomerOrdersAllPages(ctx.customerId, etherfusePages)
+            : await fetchCustomerOrdersAllPages(ctx.customerId);
+      }
+      // Fallback: si no hay contexto o el customer endpoint devolvió vacío,
+      // usar el endpoint de org para no perder órdenes en sandbox
+      if (rows.length === 0) {
+        rows = await fetchOrgOrdersAllPages(etherfusePages ?? 20);
+      }
+      const seenEf = new Set<string>();
       for (const row of rows) {
         if (row && typeof row === "object") {
           const m = etherfuseRowToMovement(row as Record<string, unknown>);
-          if (m) out.push(m);
+          if (m && !seenEf.has(m.id)) {
+            seenEf.add(m.id);
+            out.push(m);
+          }
         }
       }
     } catch {
