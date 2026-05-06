@@ -189,12 +189,13 @@ export async function submitEtherfuseKycIdentityData(params: {
   identity: EtherfuseKycSubmitIdentity;
 }): Promise<{ status: EtherfuseKycStatus; message: string | null }> {
   const path = `/ramp/customer/${encodeURIComponent(params.customerId)}/kyc`;
+  const resolvedAccountType = params.accountType ?? 'personal'
   const body = {
     ...(params.pubkey ? { pubkey: params.pubkey } : {}),
-    accountType: params.accountType ?? 'personal',
+    accountType: resolvedAccountType,
     identity: {
-      accountType: params.accountType ?? 'personal',
       ...params.identity,
+      accountType: resolvedAccountType, // after spread so undefined from params.identity doesn't override
     },
   };
   const res = await etherfuseFetch(path, {
