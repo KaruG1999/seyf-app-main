@@ -109,7 +109,8 @@ export async function POST(req: Request) {
       })
     }
 
-    const existing = await getEtherfuseOnboardingSession()
+    // Redis-first: pasa publicKey para buscar sesión guardada por wallet
+    const existing = await getEtherfuseOnboardingSession(publicKey)
     const fresh = newEtherfuseOnboardingIds()
     const ids = resolveOnboardingIds(existing, publicKey, fresh)
     const hasMatchingSession =

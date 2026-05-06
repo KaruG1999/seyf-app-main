@@ -1,5 +1,6 @@
 import { findRampContextFromOrgWallets } from "@/lib/etherfuse/customer-lookup";
 import { getEtherfuseOnboardingSession } from "@/lib/etherfuse/onboarding-session";
+import { getStoredOnboardingSession } from "@/lib/seyf/onboarding-session-store";
 import { resolveMvpPartnerRampIdentity } from "@/lib/etherfuse/partner-accounts";
 import {
   isValidStellarPublicKey,
@@ -39,23 +40,33 @@ export type EtherfuseRampContext = {
 export async function resolveEtherfuseRampContext(options?: {
   walletPublicKeyHint?: string | null;
 }): Promise<EtherfuseRampContext | null> {
-  const session = await getEtherfuseOnboardingSession();
-
   const hint = options?.walletPublicKeyHint?.trim();
   const hintPk =
     hint && isValidStellarPublicKey(normalizeStellarPublicKey(hint))
       ? normalizeStellarPublicKey(hint)
       : null;
 
-  // When we have both a session cookie AND a wallet hint for the same public key,
-  // verify the cookie's customerId via wallet lookup to catch stale cookies
-  // (e.g. org ID stored by a previous bug). Prefer the lookup result if they differ.
+  // 1. Redis — fuente de verdad principal (keyed por walletPublicKey)
+  if (hintPk) {
+    const stored = await getStoredOnboardingSession(hintPk);
+    if (stored?.customerId && stored.bankAccountId) {
+      return {
+        customerId: stored.customerId,
+        publicKey: hintPk,
+        bankAccountId: stored.bankAccountId,
+        source: "wallet_lookup",
+      };
+    }
+  }
+
+  // 2. Cookie httpOnly — fallback si Redis no tiene datos (primera sesión, Redis vacío)
+  const session = await getEtherfuseOnboardingSession();
   if (session) {
     if (hintPk && normalizeStellarPublicKey(session.publicKey) === hintPk) {
+      // Verificar si el Etherfuse API conoce un customerId diferente (cookie stale)
       try {
         const found = await findRampContextFromOrgWallets(hintPk);
         if (found?.customerId && found.bankAccountId && found.customerId !== session.customerId) {
-          // Lookup found a DIFFERENT customerId → cookie is stale, use the real one
           return {
             customerId: found.customerId,
             publicKey: hintPk,
@@ -63,12 +74,8 @@ export async function resolveEtherfuseRampContext(options?: {
             source: "wallet_lookup",
           };
         }
-        // Lookup returned null or same customerId → trust the cookie.
-        // Null can happen when the customer was just created (not yet indexed)
-        // or when the org wallet endpoint is temporarily unavailable.
-        // Downstream calls will surface "Organization not found" if truly stale.
       } catch {
-        // Lookup failed (network error) — fall through to cookie as-is
+        // network error — usar cookie como está
       }
     }
     return {
@@ -79,6 +86,7 @@ export async function resolveEtherfuseRampContext(options?: {
     };
   }
 
+  // 3. Etherfuse org wallet lookup — dispositivo nuevo sin Redis ni cookie
   if (hintPk) {
     try {
       const found = await findRampContextFromOrgWallets(hintPk);
@@ -91,7 +99,7 @@ export async function resolveEtherfuseRampContext(options?: {
         };
       }
     } catch {
-      // sin contexto org/wallet
+      // sin contexto
     }
   }
 
