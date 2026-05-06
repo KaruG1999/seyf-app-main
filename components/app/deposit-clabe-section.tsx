@@ -50,15 +50,28 @@ export default function DepositClabeSection() {
     setActivating(true)
     setError(null)
     try {
-      // Re-fetch para ver si el KYC submit ya creó la cuenta bancaria
-      await fetchInfo()
-      // Si sigue sin CLABE esperar un momento y reintentar
-      if (!info?.etherfuseDepositClabe) {
-        await new Promise((r) => setTimeout(r, 1500))
-        await fetchInfo()
+      const res = await fetch('/api/seyf/etherfuse/activate-deposit-clabe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: walletAddr }),
+      })
+      const data = (await res.json()) as {
+        ok?: boolean
+        etherfuseDepositClabe?: string | null
+        error?: { message_es?: string } | string
       }
+      if (!res.ok || !data.ok) {
+        const msg =
+          typeof data.error === 'object'
+            ? (data.error?.message_es ?? 'No se pudo activar la cuenta.')
+            : (data.error ?? 'No se pudo activar la cuenta.')
+        setError(msg)
+        return
+      }
+      // Re-fetch para mostrar la CLABE actualizada
+      await fetchInfo()
     } catch {
-      setError('Error al activar la cuenta. Intenta de nuevo.')
+      setError('Error de conexión. Intenta de nuevo.')
     } finally {
       setActivating(false)
     }

@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { OrderTransactionDetailCard, pickQuoteId } from '@/components/app/dev/etherfuse-order-cards'
 import { SpeiPaymentCard } from '@/components/app/dev/spei-payment-card'
 import { cn } from '@/lib/utils'
+import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { extractOrderIdFromCreateOrderResponse } from '@/lib/etherfuse/order-create-response'
 import {
   speiDetailsFromOnrampOrderApiJson,
@@ -32,6 +33,7 @@ type RampContextPayload = {
 }
 
 export default function EtherfuseRampDevClient() {
+  const { wallet } = useSeyfWallet()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [targetOverride, setTargetOverride] = useState('')
@@ -161,10 +163,11 @@ export default function EtherfuseRampDevClient() {
     if (!quoteId) {
       throw new Error('No encuentro quoteId en la cotización (~2 min de validez)')
     }
+    const walletAddr = wallet?.stellarAddress?.trim() ?? ''
     const res = await fetch('/api/seyf/etherfuse/order/onramp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quoteId }),
+      body: JSON.stringify({ quoteId, ...(walletAddr ? { wallet: walletAddr } : {}) }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
