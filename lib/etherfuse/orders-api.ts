@@ -179,16 +179,19 @@ export async function fetchCustomerOrdersAllPages(
 }
 
 /**
- * Busca onramp pendiente (status created) con mismo banco y mismo monto fiat.
+ * Busca onramp pendiente (status created o funded) con mismo banco y mismo monto fiat.
+ * "funded" = MXN recibido pero CETES aún en proceso — sigue siendo una orden "en curso".
  */
 export function findPendingOnrampOrderForAmount(
   orders: OrderRow[],
   bankAccountId: string,
   amountMxn: number,
 ): string | null {
+  const PENDING_STATUSES = new Set(["created", "funded", "processing"])
   for (const row of orders) {
     if (typeFromRow(row)?.toLowerCase() !== "onramp") continue;
-    if (statusFromRow(row)?.toLowerCase() !== "created") continue;
+    const rowStatus = statusFromRow(row)?.toLowerCase() ?? ""
+    if (!PENDING_STATUSES.has(rowStatus)) continue;
     if (bankFromRow(row) !== bankAccountId) continue;
     const fiat = amountFiatFromRow(row);
     if (fiat === undefined) continue;

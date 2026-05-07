@@ -213,8 +213,9 @@ export async function POST(req: Request) {
       submission = await submitEtherfuseKycIdentityData(buildIdentityPayload())
     } catch (submitErr) {
       const submitMsg = submitErr instanceof Error ? submitErr.message : String(submitErr)
+      const submitMsgLow = submitMsg.toLowerCase()
       // Sesión stale (org cambió) — regenerar contexto fresco e intentar de nuevo
-      if (submitMsg.toLowerCase().includes('organization not found') || submitMsg.toLowerCase().includes('customer not found')) {
+      if (submitMsgLow.includes('organization not found') || submitMsgLow.includes('customer not found')) {
         console.warn('[kyc/submit] stale session detected, regenerating onboarding context and retrying')
         try {
           const freshCtx = await resolveOnboardingContext(false)
@@ -227,6 +228,18 @@ export async function POST(req: Request) {
           throw e
         }
         submission = await submitEtherfuseKycIdentityData(buildIdentityPayload())
+      } else if (
+        // KYC ya enviado/aprobado — no es error, retornar el status actual
+        submitMsgLow.includes('already') ||
+        submitMsgLow.includes('kyc') ||
+        submitMsgLow.includes('proposed') ||
+        submitMsgLow.includes('approved') ||
+        submitMsgLow.includes('compliant') ||
+        submitMsgLow.includes('in review') ||
+        submitMsgLow.includes('submitted')
+      ) {
+        console.info('[kyc/submit] KYC ya existente, tratando como éxito:', submitMsg)
+        submission = { status: 'proposed', message: null }
       } else {
         throw submitErr
       }

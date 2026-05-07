@@ -29,27 +29,56 @@ function isOrderEffectivelyFunded(status: string | null): boolean {
   return s === 'funded' || s === 'completed' || s === 'success'
 }
 
-async function autoConfirmSandboxOrder(orderId: string): Promise<{ status: string | null; details: unknown }> {
+async function autoConfirmSandboxOrder(
+  orderId: string,
+  opts?: { skipInitialDelay?: boolean },
+): Promise<{ status: string | null; details: unknown }> {
   let lastDetails: unknown = null
   let lastStatus: string | null = null
 
-  // Esperar 1.5s para que Etherfuse registre la orden antes de simular pago
-  await sleep(1500)
+  if (!opts?.skipInitialDelay) {
+    // Esperar 1.5s para que Etherfuse registre la orden antes de simular pago
+    await sleep(1500)
+  }
 
   for (let attempt = 0; attempt < BONUS_AUTO_CONFIRM_ATTEMPTS; attempt++) {
-    const sim = await etherfuseFetch('/ramp/order/fiat_received', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ orderId }),
-    })
-    const { text: simText } = await etherfuseReadBody(sim)
-    if (!sim.ok) {
-      throw new AppError('provider_unavailable', {
-        statusCode: sim.status >= 400 && sim.status < 600 ? sim.status : 502,
-        retryable: false,
-        message: `Sandbox fiat_received falló: ${simText.slice(0, 500)}`,
+    let simOk = false
+    try {
+      const sim = await etherfuseFetch('/ramp/order/fiat_received', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId }),
       })
+      const { text: simText } = await etherfuseReadBody(sim)
+      if (!sim.ok) {
+        // Si el error indica que la orden ya fue procesada, continuar verificando estado
+        const simLow = simText.toLowerCase()
+        if (simLow.includes('already') || simLow.includes('funded') || simLow.includes('invalid status')) {
+          console.info('[bonus/autoConfirm] fiat_received ignorado (orden ya procesada):', simText.slice(0, 200))
+          simOk = true
+        } else {
+          throw new AppError('provider_unavailable', {
+            statusCode: sim.status >= 400 && sim.status < 600 ? sim.status : 502,
+            retryable: false,
+            message: `Sandbox fiat_received falló: ${simText.slice(0, 500)}`,
+          })
+        }
+      } else {
+        simOk = true
+      }
+    } catch (e) {
+      // AppError propio: re-throw. Errores de red: re-throw.
+      // Errores de Etherfuse que incluyan "already" en el mensaje: ignorar
+      const eMsg = e instanceof Error ? e.message.toLowerCase() : String(e).toLowerCase()
+      if (eMsg.includes('already') || eMsg.includes('funded') || eMsg.includes('invalid status')) {
+        console.info('[bonus/autoConfirm] fiat_received ignorado (ya procesado, caught):', eMsg.slice(0, 200))
+        simOk = true
+      } else {
+        throw e
+      }
     }
+
+    if (!simOk) break
 
     lastDetails = await fetchOrderDetailsWithRetry(orderId)
     const details = pickRampOrderTransactionDetails(lastDetails)
@@ -202,7 +231,24 @@ export async function POST(request: Request) {
       }
     }
 
-    const confirm = await autoConfirmSandboxOrder(ramp.deposit.orderId)
+    // Si la orden fue reutilizada (ya existía en funded/processing), verificar estado actual
+    // antes de llamar fiat_received de nuevo
+    let confirm: { status: string | null; details: unknown }
+    if (ramp.mode === 'reused') {
+      const currentDetails = await fetchOrderDetailsWithRetry(ramp.deposit.orderId)
+      const currentInfo = pickRampOrderTransactionDetails(currentDetails)
+      if (isOrderEffectivelyFunded(currentInfo.status)) {
+        // Orden ya está en buen estado, registrar claim sin re-confirmar
+        console.info('[bonus/welcome] orden reusada ya funded, registrando claim directo:', ramp.deposit.orderId)
+        confirm = { status: currentInfo.status, details: currentDetails }
+      } else {
+        // Orden reusada pero no funded aún — intentar confirmar sin delay inicial
+        confirm = await autoConfirmSandboxOrder(ramp.deposit.orderId, { skipInitialDelay: true })
+      }
+    } else {
+      confirm = await autoConfirmSandboxOrder(ramp.deposit.orderId)
+    }
+
     if (!isOrderEffectivelyFunded(confirm.status)) {
       throw new AppError('provider_unavailable', {
         statusCode: 502,

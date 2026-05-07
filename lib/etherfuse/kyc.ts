@@ -148,7 +148,12 @@ export async function fetchEtherfuseKycStatus(
     return { ok: false, reason: "invalid_body" };
   }
   const statusRaw = json.status;
-  if (typeof statusRaw !== "string" || !isKycStatus(statusRaw)) {
+  if (typeof statusRaw !== "string") {
+    return { ok: false, reason: "invalid_body" };
+  }
+  // Normalizar "compliant" (sandbox) antes de validar
+  const normalizedStatusRaw = normalizeKycStatus(statusRaw)
+  if (!isKycStatus(normalizedStatusRaw)) {
     return { ok: false, reason: "invalid_body" };
   }
   const cid = json.customerId;
@@ -162,7 +167,7 @@ export async function fetchEtherfuseKycStatus(
     data: {
       customerId: cid,
       walletPublicKey: wpk,
-      status: statusRaw,
+      status: normalizedStatusRaw,
       approvedAt:
         json.approvedAt === null || json.approvedAt === undefined
           ? null
