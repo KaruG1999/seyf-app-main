@@ -48,7 +48,7 @@ export function mapEtherfuseHttpError(
 
   // 4xx (excluding 429, handled above) — client error, not retryable
   if (status >= 400 && status <= 499) {
-    return new AppError("generic_error", {
+    return new AppError("provider_rejected", {
       statusCode: 400,
       retryable: false,
       message: providerMessage,

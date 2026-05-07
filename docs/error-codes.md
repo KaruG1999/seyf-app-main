@@ -24,6 +24,7 @@ Todas las respuestas de error de la API comparten una sola forma:
 | `spei_timeout`         | 504  | `true`      | Tu transferencia SPEI sigue en proceso. Puede tardar hasta el siguiente día hábil. | Una transferencia SPEI o liquidación on-chain superó el tiempo de espera esperado.                                                                       |
 | `deploy_failed`        | 500  | `false`     | Algo salió mal. Estamos en ello.                                                   | Una operación on-chain (compra de Stablebond, desembolso de adelanto) falló. El saldo del usuario no se ve afectado.                                     |
 | `provider_unavailable` | 502  | `true`      | El proveedor no está disponible en este momento. Intenta en unos minutos.          | Etherfuse u Horizon devolvió un error no-2xx que no es un error del cliente. También se usa para conflicto 409 (orden pendiente) con `retryable: false`. |
+| `provider_rejected`    | 400  | `false`     | Etherfuse rechazó la operación… (KYC, términos, cuenta bancaria). Ver tabla en código (`MESSAGE_ES`). | Respuesta HTTP 4xx del API de Etherfuse (p. ej. cotización u orden rechazada). El detalle técnico queda solo en logs (`AppError.message`). |
 | `generic_error`        | 500  | `false`     | Algo salió mal. Estamos en ello.                                                   | Catch-all para errores inesperados no cubiertos por los códigos anteriores.                                                                              |
 
 
@@ -38,10 +39,12 @@ Esto es requerido por el PRD §2.8 (US-13, CA-02 y CA-05) para evitar exponer de
 
 ## Logging en el servidor
 
+Si `SEYF_API_DEBUG_ERRORS=true`, las respuestas `generic_error` incluyen `debug_message` con el error interno (solo para depuración; no activar en producción hacia usuarios finales).
+
 Cada llamada a `toErrorResponse` emite una línea de `console.error` con:
 
 - Un tag `[seyf/<contexto-de-ruta>]` que identifica la ruta de origen.
-- El mensaje de error interno (nunca se envía al cliente).
+- El mensaje de error interno (por defecto no se envía al cliente; ver `SEYF_API_DEBUG_ERRORS` arriba).
 
 Para errores originados en Etherfuse la línea dice `[seyf/<contexto>] provider error: <mensaje extraído>`.
 Para instancias de `AppError`: `[seyf/<contexto>] <code> <mensaje interno>`.
