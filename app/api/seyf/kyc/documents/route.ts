@@ -4,16 +4,20 @@ import { uploadEtherfuseKycDocuments } from '@/lib/etherfuse/kyc'
 import { getEtherfuseOnboardingSession } from '@/lib/etherfuse/onboarding-session'
 import { isValidStellarPublicKey, normalizeStellarPublicKey } from '@/lib/etherfuse/stellar-public-key'
 import { AppError, toErrorResponse } from '@/lib/seyf/api-error'
+import { MAX_KYC_IMAGE_DATA_URL_CHARS } from '@/lib/seyf/kyc-upload-limits'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
-
-const MAX_IMAGE_DATA_URL_LEN = 14_000_000 // ~10 MB binary in base64 + header
 const DATA_URL_IMAGE_REGEX = /^data:image\/(jpeg|jpg|png);base64,[A-Za-z0-9+/=]+$/i
 
 const imageSchema = z.object({
   label: z.string().trim().min(1),
-  image: z.string().trim().min(32).max(MAX_IMAGE_DATA_URL_LEN).regex(DATA_URL_IMAGE_REGEX),
+  image: z
+    .string()
+    .trim()
+    .min(32)
+    .max(MAX_KYC_IMAGE_DATA_URL_CHARS)
+    .regex(DATA_URL_IMAGE_REGEX),
 })
 
 const bodySchema = z.object({
