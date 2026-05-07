@@ -239,6 +239,10 @@ export default function DashboardClient({
     setWelcomeBonusMessage(null)
     try {
       const addr = wallet?.stellarAddress?.trim() ?? ''
+      if (!addr) {
+        setWelcomeBonusMessage('Conecta tu wallet Pollar y espera a que cargue la dirección antes de activar el bono.')
+        return
+      }
       const r = await fetch('/api/seyf/etherfuse/bonus/welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

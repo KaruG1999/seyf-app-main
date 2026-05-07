@@ -52,9 +52,6 @@ function walletIdFromRow(row: Record<string, unknown>): string | undefined {
 export async function resolveMvpPartnerCryptoWalletId(
   stellarPublicKey: string,
 ): Promise<string> {
-  const env = process.env.ETHERFUSE_MVP_CRYPTO_WALLET_ID?.trim();
-  if (env) return env;
-
   const res = await etherfuseFetch("/ramp/wallets", { method: "GET" });
   const { json, text } = await etherfuseReadBody<Paged<Record<string, unknown>>>(
     res,
@@ -71,6 +68,8 @@ export async function resolveMvpPartnerCryptoWalletId(
     const wid = walletIdFromRow(row);
     if (wid) return wid;
   }
+  const env = process.env.ETHERFUSE_MVP_CRYPTO_WALLET_ID?.trim();
+  if (env) return env;
   throw new Error(
     "No hay cryptoWalletId en /ramp/wallets para esta clave Stellar. Registra la wallet en Etherfuse o define ETHERFUSE_MVP_CRYPTO_WALLET_ID (UUID).",
   );

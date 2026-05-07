@@ -12,7 +12,7 @@ import {
 import {
   cancelOrder,
   fetchOrderDetails,
-  fetchOrdersFirstPage,
+  fetchOrgOrdersAllPages,
   findPendingOnrampOrderForAmount,
 } from "./orders-api";
 
@@ -133,7 +133,7 @@ export async function executeMvpPartnerOnramp(params: {
   }
 
   if (params.forceNew) {
-    const orders = await fetchOrdersFirstPage();
+    const orders = await fetchOrgOrdersAllPages();
     const pendingId = findPendingOnrampOrderForAmount(
       orders,
       identity.bankAccountId,
@@ -167,9 +167,8 @@ export async function executeMvpPartnerOnramp(params: {
       bankAccountId: identity.bankAccountId,
       quoteId,
       publicKey: identity.publicKey,
-      ...(process.env.SEYF_PREFER_CRYPTO_WALLET_ID === "true" && cryptoWalletId
-        ? { cryptoWalletId }
-        : {}),
+      // Stellar: Etherfuse suele exigir cryptoWalletId; sin él aparece "Proxy account not found" (400).
+      ...(cryptoWalletId ? { cryptoWalletId } : {}),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
@@ -178,7 +177,7 @@ export async function executeMvpPartnerOnramp(params: {
       msg.includes("(409)") ||
       lm.includes("pending onramp order already exists")
     ) {
-      const orders = await fetchOrdersFirstPage();
+      const orders = await fetchOrgOrdersAllPages();
       const pendingId = findPendingOnrampOrderForAmount(
         orders,
         identity.bankAccountId,
