@@ -5,8 +5,8 @@ import DepositClabeSection from '@/components/app/deposit-clabe-section'
 export default function AnadirPage() {
   return (
     <>
+      <EtherfuseRampDevClient anadirScreen="landing" />
       <DepositClabeSection />
-      <EtherfuseRampDevClient />
     </>
   )
 }

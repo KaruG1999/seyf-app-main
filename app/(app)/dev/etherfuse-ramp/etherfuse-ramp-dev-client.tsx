@@ -33,11 +33,18 @@ type RampContextPayload = {
   kycReason: string | null
 }
 
-export default function EtherfuseRampDevClient() {
+export type EtherfuseRampDevClientProps = {
+  /**
+   * - `landing`: solo CTA hacia /anadir/monto (evita tarjetas que parecen botón).
+   * - `deposit`: formulario de monto + flujo SPEI (por defecto si no se pasa `anadirScreen`).
+   */
+  anadirScreen?: 'landing' | 'deposit'
+}
+
+export default function EtherfuseRampDevClient({ anadirScreen = 'deposit' }: EtherfuseRampDevClientProps) {
   const { wallet, etherfusePublicKeyHint } = useSeyfWallet()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [targetOverride, setTargetOverride] = useState('')
   const [sourceAmount, setSourceAmount] = useState('500')
   const [orderJson, setOrderJson] = useState<string>('')
   const [fiatJson, setFiatJson] = useState<string>('')
@@ -189,8 +196,6 @@ export default function EtherfuseRampDevClient() {
       const body: { sourceAmount: string; targetAsset?: string; wallet?: string } = {
         sourceAmount: sourceAmount.trim() || '500',
       }
-      const t = targetOverride.trim()
-      if (t) body.targetAsset = t
       if (etherfusePublicKeyHint) body.wallet = etherfusePublicKeyHint
       const res = await fetch('/api/seyf/etherfuse/onramp/prepare-transfer', {
         method: 'POST',
@@ -202,10 +207,7 @@ export default function EtherfuseRampDevClient() {
         throw new Error(userFacingSeyfApiMessage(data, res.status))
       }
       const o = JSON.stringify(data, null, 2)
-      const assetLabel =
-        targetOverride.trim()
-          ? targetOverride.trim().split(':')[0]?.trim() || 'CETES'
-          : 'CETES'
+      const assetLabel = 'CETES'
       const details = speiDetailsFromOnrampOrderApiJson(o, assetLabel, 'Etherfuse')
       if (!details) {
         throw new Error(
@@ -284,27 +286,76 @@ export default function EtherfuseRampDevClient() {
 
   const showDepositProgress = Boolean(speiDetails || fiatJson || onrampTxSignature)
 
+  if (anadirScreen === 'landing') {
+    return (
+      <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
+        <AppBackLink href="/dashboard" />
+
+        {!canOperate ? (
+          <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
+            <p className="text-sm font-bold text-foreground">{depositBlocked.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{depositBlocked.lead}</p>
+            {readinessReasons.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                {readinessReasons.slice(0, 5).map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 flex flex-col gap-2">
+              <Link
+                href={depositBlocked.primaryLink.href}
+                className="inline-flex text-sm font-semibold text-foreground underline"
+              >
+                {depositBlocked.primaryLink.label}
+              </Link>
+              {depositBlocked.extraLinks.map((item) => (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className="inline-flex text-xs font-medium text-muted-foreground underline decoration-muted-foreground/60"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-4 rounded-[1.5rem] border border-border bg-card p-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                Depósito SPEI
+              </p>
+              <h1 className="mt-2 text-xl font-black tracking-tight text-foreground sm:text-2xl">
+                Añadir fondos
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Indica en el siguiente paso cuánto vas a enviar; generamos la cotización y te mostramos la CLABE,
+                el beneficiario y el importe exacto para hacer la transferencia desde tu banco.
+              </p>
+            </div>
+            <Button
+              asChild
+              size="lg"
+              className="h-14 w-full rounded-2xl text-base font-bold shadow-md"
+            >
+              <Link href="/anadir/monto">Genera datos de depósito</Link>
+            </Button>
+          </section>
+        )}
+
+        {err && (
+          <p className="rounded-[1rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {err}
+          </p>
+        )}
+      </AppPageBody>
+    )
+  }
+
   return (
     <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
-      <AppBackLink href="/dashboard" />
-
-      <section className="relative overflow-hidden rounded-[1.5rem] border border-[#bfd6ca] bg-gradient-to-br from-[#edf6f2] via-[#e6f0ea] to-[#dce9e3] p-4 dark:border-[#2b4a43] dark:bg-gradient-to-br dark:from-[#0d3531] dark:via-[#15534a] dark:to-[#1f6559] sm:p-5">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#9ec7b3]/25 blur-3xl dark:bg-[#6ba690]/25" />
-        <div className="pointer-events-none absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-[#b8b8b5]/20 blur-3xl dark:bg-[#22433c]/40" />
-        <div className="relative">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="inline-flex rounded-full border border-[#b8b8b5]/60 bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5f7168] dark:border-white/20 dark:bg-white/15 dark:text-[#d2e9df]">
-            Depósito SPEI
-            </p>
-          </div>
-          <h1 className="text-xl font-black tracking-tight text-[#41534b] dark:text-white sm:text-2xl">
-            Añadir fondos
-          </h1>
-          <p className="mt-1.5 text-sm text-[#7b8f86] dark:text-[#d2e9df]">
-            Depósito por SPEI: mismo uso que transferir a una cuenta CLABE desde tu banco.
-          </p>
-        </div>
-      </section>
+      <AppBackLink href="/anadir" />
 
       {!canOperate ? (
         <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
@@ -349,7 +400,7 @@ export default function EtherfuseRampDevClient() {
           <div>
             <h2 className="text-base font-bold text-foreground">¿Cuánto vas a depositar?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Escribe el monto en pesos. Generamos la cotización y te mostramos CLABE e importe exacto.
+              Monto en pesos. Necesitamos el importe exacto para generar los datos de transferencia SPEI.
             </p>
           </div>
           <Input
@@ -363,16 +414,6 @@ export default function EtherfuseRampDevClient() {
             className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
             aria-label="Monto en pesos mexicanos"
           />
-          <Input
-            id="manual-asset"
-            name="etherfuse-onramp-asset-override"
-            autoComplete="off"
-            value={targetOverride}
-            onChange={(e) => setTargetOverride(e.target.value)}
-            placeholder="Activo (opcional, avanzado)"
-            className="h-11 rounded-xl border-border bg-background px-3 font-mono text-xs"
-            aria-label="Referencia de activo opcional"
-          />
           <Button
             type="button"
             className="h-14 w-full rounded-2xl bg-foreground text-base font-bold text-background shadow-md"
@@ -382,10 +423,10 @@ export default function EtherfuseRampDevClient() {
             {busy === 'spei-manual-prepare' ? (
               <>
                 <Spinner className="size-4 text-background" />
-                Preparando datos…
+                Generando datos…
               </>
             ) : (
-              'Ver datos para transferir'
+              'Genera datos de depósito'
             )}
           </Button>
         </section>

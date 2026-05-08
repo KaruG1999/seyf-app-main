@@ -116,9 +116,8 @@ export function SpeiPaymentCard({
             </>
           ) : (
             <p className="text-sm leading-relaxed text-[#5f7168] dark:text-[#b8d9ce]/85">
-              Indica el monto que vas a enviar y usa el botón{' '}
-              <span className="font-semibold text-[#1a2e28] dark:text-white">Ver datos para transferir</span>.
-              Aquí aparecerán la CLABE, el beneficiario y el importe exacto (como en tu banca tradicional).
+              Completa el monto arriba y pulsa <span className="font-semibold text-[#1a2e28] dark:text-white">Genera datos de depósito</span>.
+              Aquí aparecerán la CLABE, el beneficiario y el importe exacto.
             </p>
           )}
         </div>

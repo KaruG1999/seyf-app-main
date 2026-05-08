@@ -65,19 +65,19 @@ export function mapEtherfuseHttpError(
           low.includes("caduc") ||
           low.includes("invalid quote") ||
           low.includes("quote not found")
-        ? "La cotización ya no es válida (~2 min) o no coincide con tu sesión. Cierra y vuelve a pulsar «Ver datos para transferir»."
+        ? "La cotización ya no es válida (~2 min) o no coincide con tu sesión. Vuelve atrás y pulsa de nuevo «Genera datos de depósito»."
         : low.includes("nonstable") ||
             low.includes("non_stable") ||
             low.includes("nonstableasset")
-          ? "El activo de destino no es válido para esta rampa. Deja vacío el campo «Activo (opcional)» o revisa en Etherfuse que CETES/MXNe figuren en /ramp/assets para tu wallet."
+          ? "El activo de destino no es válido para esta rampa. Revisa en Etherfuse que CETES/MXNe figuren en /ramp/assets para tu wallet."
           : (low.includes("bank") && low.includes("account")) ||
               low.includes("clabe") ||
               low.includes("fiat account")
             ? "Revisa en devnet que la cuenta bancaria y la CLABE estén activas y coincidan con /identidad."
             : low.includes("not eligible") || low.includes("not_eligible")
               ? "Tu perfil en Etherfuse aún no puede cotizar esta operación. Completa KYC y términos en devnet y vuelve a intentar."
-              : lm.includes("pending onramp order already exists") ||
-                  lm.includes("already exists for this bank account and amount")
+              : low.includes("pending onramp order already exists") ||
+                  low.includes("already exists for this bank account and amount")
                 ? "Ya tienes una orden de depósito pendiente con ese monto. Usa los mismos datos en Etherfuse o espera a que se procese; si acabas de intentar de nuevo, recarga la pantalla."
                 : undefined;
     return new AppError("provider_rejected", {
