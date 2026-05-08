@@ -87,6 +87,19 @@ function mapKycProviderSetupError(message: string): AppError | null {
         'No encontramos tu organización en Etherfuse para esta API key/entorno. Revisa ETHERFUSE_API_BASE_URL y ETHERFUSE_API_KEY.',
     })
   }
+  if (
+    m.includes('cannot claim a wallet') ||
+    m.includes('registered to another organization') ||
+    m.includes('claimed by a different organization')
+  ) {
+    return new AppError('validation_error', {
+      statusCode: 400,
+      retryable: false,
+      messageEs:
+        'Esta wallet ya está asociada a otra organización de Etherfuse. Conecta la wallet correcta para este entorno o cambia la API key/organización activa antes de continuar.',
+      message,
+    })
+  }
   return null
 }
 

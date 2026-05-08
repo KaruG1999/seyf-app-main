@@ -193,10 +193,9 @@ export default function EtherfuseRampDevClient({ anadirScreen = 'deposit' }: Eth
 
   const openManualSpeiReview = () =>
     run('spei-manual-prepare', async () => {
-      const body: { sourceAmount: string; targetAsset?: string; wallet?: string } = {
+      const body: { sourceAmount: string; targetAsset?: string } = {
         sourceAmount: sourceAmount.trim() || '500',
       }
-      if (etherfusePublicKeyHint) body.wallet = etherfusePublicKeyHint
       const res = await fetch('/api/seyf/etherfuse/onramp/prepare-transfer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

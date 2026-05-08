@@ -60,7 +60,13 @@ export async function registerOrganizationWallet(params: {
 export function isRecoverableRegisterWalletConflict(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error);
   const m = msg.toLowerCase();
-  if (!m.includes("register wallet")) return false;
+  const looksLikeRegisterWalletFailure =
+    m.includes("register wallet") ||
+    m.includes("cannot claim a wallet") ||
+    m.includes("registered to another organization") ||
+    m.includes("claimed by a different organization") ||
+    m.includes("previous claim");
+  if (!looksLikeRegisterWalletFailure) return false;
   return (
     msg.includes("(409)") ||
     m.includes("already added") ||
@@ -69,6 +75,8 @@ export function isRecoverableRegisterWalletConflict(error: unknown): boolean {
     m.includes("duplicate") ||
     // Wallet registrada en un org anterior — KYC puede continuar sin ownership claim
     m.includes("claimed by a different organization") ||
+    m.includes("registered to another organization") ||
+    m.includes("cannot claim a wallet") ||
     m.includes("previous claim")
   );
 }
