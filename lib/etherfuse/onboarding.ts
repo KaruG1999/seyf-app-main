@@ -13,6 +13,7 @@ export type GenerateOnboardingUrlParams = {
   bankAccountId: string;
   publicKey: string;
   blockchain?: EtherfuseBlockchain;
+  accountType?: string;
 };
 
 type OnboardingUrlResponse = {
@@ -38,6 +39,7 @@ export async function generateOnboardingPresignedUrl(
       bankAccountId: params.bankAccountId,
       publicKey: params.publicKey,
       blockchain,
+      accountType: params.accountType ?? 'personal',
     }),
   });
 

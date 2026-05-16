@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 
 /**
- * Página legacy (Bitso CLABE). Se mantiene implementación backend, pero UX
- * principal migra a /anadir (Etherfuse).
+ * Depositar → /anadir (Etherfuse ramp + CLABE de depósito).
  */
 export default function DepositarPage() {
   redirect('/anadir')

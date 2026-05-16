@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from 'fs/promises'
-import path from 'path'
+import { Redis } from '@upstash/redis'
 import type { EtherfuseKycSnapshot, EtherfuseKycStatus } from '@/lib/etherfuse/kyc'
 
 type KycStateRow = {
@@ -12,30 +11,16 @@ type KycStateRow = {
   lastEventId: string | null
 }
 
-type KycStateStore = {
-  rows: KycStateRow[]
+function getRedis(): Redis {
+  return Redis.fromEnv()
 }
 
-function kycStorePath() {
-  return path.join(process.cwd(), 'data', 'seyf-kyc-state.json')
+function kycKey(customerId: string, walletPublicKey: string): string {
+  return `seyf:kyc:${customerId}:${walletPublicKey}`
 }
 
-async function loadStore(): Promise<KycStateStore> {
-  try {
-    const raw = await readFile(kycStorePath(), 'utf-8')
-    const parsed = JSON.parse(raw) as KycStateStore
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.rows)) {
-      return { rows: [] }
-    }
-    return parsed
-  } catch {
-    return { rows: [] }
-  }
-}
-
-async function saveStore(store: KycStateStore): Promise<void> {
-  await mkdir(path.dirname(kycStorePath()), { recursive: true })
-  await writeFile(kycStorePath(), JSON.stringify(store, null, 2), 'utf-8')
+function kycIndexKey(customerId: string): string {
+  return `seyf:kyc:index:${customerId}`
 }
 
 function rowToSnapshot(row: KycStateRow): EtherfuseKycSnapshot {
@@ -55,11 +40,13 @@ export async function getStoredKycSnapshot(
   customerId: string,
   walletPublicKey: string,
 ): Promise<EtherfuseKycSnapshot | null> {
-  const store = await loadStore()
-  const found = store.rows.find(
-    (row) => row.customerId === customerId && row.walletPublicKey === walletPublicKey,
-  )
-  return found ? rowToSnapshot(found) : null
+  try {
+    const redis = getRedis()
+    const row = await redis.get<KycStateRow>(kycKey(customerId, walletPublicKey))
+    return row ? rowToSnapshot(row) : null
+  } catch {
+    return null
+  }
 }
 
 export async function upsertStoredKycSnapshot(params: {
@@ -71,43 +58,43 @@ export async function upsertStoredKycSnapshot(params: {
   eventId?: string | null
   eventTimestamp?: string | null
 }): Promise<{ updated: boolean }> {
-  const store = await loadStore()
-  const idx = store.rows.findIndex(
-    (row) => row.customerId === params.customerId && row.walletPublicKey === params.walletPublicKey,
-  )
+  const redis = getRedis()
+  const key = kycKey(params.customerId, params.walletPublicKey)
+  const existing = await redis.get<KycStateRow>(key)
+
   const eventId = params.eventId ?? null
   const hasExplicitTimestamp = Boolean(params.eventTimestamp)
-  const incomingTs = hasExplicitTimestamp ? new Date(params.eventTimestamp as string).getTime() : Date.now()
+  const incomingTs = hasExplicitTimestamp
+    ? new Date(params.eventTimestamp as string).getTime()
+    : Date.now()
 
-  if (idx >= 0) {
-    const current = store.rows[idx]
+  if (existing) {
     const samePayload =
-      current.status === params.status &&
-      current.approvedAt === (params.approvedAt ?? null) &&
-      current.currentRejectionReason === (params.currentRejectionReason ?? null)
-    if (!eventId && samePayload) {
-      return { updated: false }
-    }
-    if (eventId && current.lastEventId === eventId) return { updated: false }
-    const currentTs = new Date(current.updatedAt).getTime()
+      existing.status === params.status &&
+      existing.approvedAt === (params.approvedAt ?? null) &&
+      existing.currentRejectionReason === (params.currentRejectionReason ?? null)
+    if (!eventId && samePayload) return { updated: false }
+    if (eventId && existing.lastEventId === eventId) return { updated: false }
+
+    const currentTs = new Date(existing.updatedAt).getTime()
     if (Number.isFinite(currentTs) && Number.isFinite(incomingTs) && incomingTs < currentTs) {
       return { updated: false }
     }
     const effectiveTs =
       hasExplicitTimestamp && Number.isFinite(incomingTs) ? incomingTs : currentTs || Date.now()
-    store.rows[idx] = {
-      ...current,
+    const updated: KycStateRow = {
+      ...existing,
       status: params.status,
       approvedAt: params.approvedAt ?? null,
       currentRejectionReason: params.currentRejectionReason ?? null,
       updatedAt: new Date(effectiveTs).toISOString(),
       lastEventId: eventId,
     }
-    await saveStore(store)
+    await redis.set(key, updated, { ex: 60 * 60 * 24 * 180 })
     return { updated: true }
   }
 
-  store.rows.unshift({
+  const row: KycStateRow = {
     customerId: params.customerId,
     walletPublicKey: params.walletPublicKey,
     status: params.status,
@@ -115,8 +102,12 @@ export async function upsertStoredKycSnapshot(params: {
     currentRejectionReason: params.currentRejectionReason ?? null,
     updatedAt: new Date(incomingTs).toISOString(),
     lastEventId: eventId,
-  })
-  await saveStore(store)
+  }
+  await Promise.all([
+    redis.set(key, row, { ex: 60 * 60 * 24 * 180 }),
+    // Index: customerId → list of walletPublicKey (para listStoredKycRows)
+    redis.sadd(kycIndexKey(params.customerId), params.walletPublicKey),
+  ])
   return { updated: true }
 }
 
@@ -130,13 +121,35 @@ export async function listStoredKycRows(limit = 200): Promise<
     updatedAt: string
   }>
 > {
-  const store = await loadStore()
-  return store.rows.slice(0, Math.max(1, limit)).map((row) => ({
-    customerId: row.customerId,
-    walletPublicKey: row.walletPublicKey,
-    status: row.status,
-    approvedAt: row.approvedAt,
-    currentRejectionReason: row.currentRejectionReason,
-    updatedAt: row.updatedAt,
-  }))
+  try {
+    const redis = getRedis()
+    // Scan keys matching seyf:kyc:*:* (skip index keys)
+    const keys: string[] = []
+    let cursor = 0
+    do {
+      const [nextCursor, batch] = await redis.scan(cursor, {
+        match: 'seyf:kyc:*:G*',
+        count: 100,
+      })
+      cursor = Number(nextCursor)
+      keys.push(...batch)
+      if (keys.length >= limit) break
+    } while (cursor !== 0)
+
+    const rows = await Promise.all(
+      keys.slice(0, limit).map((k) => redis.get<KycStateRow>(k)),
+    )
+    return rows
+      .filter((r): r is KycStateRow => r !== null)
+      .map((row) => ({
+        customerId: row.customerId,
+        walletPublicKey: row.walletPublicKey,
+        status: row.status,
+        approvedAt: row.approvedAt,
+        currentRejectionReason: row.currentRejectionReason,
+        updatedAt: row.updatedAt,
+      }))
+  } catch {
+    return []
+  }
 }

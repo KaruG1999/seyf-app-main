@@ -1,9 +1,12 @@
 import {
   fetchCustomerOrdersAllPages,
+  fetchOrgOrdersAllPages,
   pickRampOrderTransactionDetails,
 } from "@/lib/etherfuse/orders-api";
+import { etherfuseFetch, etherfuseReadBody } from "@/lib/etherfuse/client";
+import { normalizeStellarPublicKey } from "@/lib/etherfuse/stellar-public-key";
 import type { InvestmentRun } from "@/lib/seyf/investment-mvp";
-import { listRuns } from "@/lib/seyf/investment-mvp";
+import { listRunsForUser } from "@/lib/seyf/investment-mvp";
 import type { EtherfuseRampContext } from "@/lib/seyf/etherfuse-ramp-context";
 import type {
   MovimientoEstado,
@@ -21,6 +24,54 @@ export {
   formatMovementListSubtitle,
 } from "@/lib/seyf/user-movements-types";
 
+/**
+ * Busca el walletId de Etherfuse directamente desde /ramp/wallets por publicKey.
+ * No usa variables de entorno MVP para evitar retornar un walletId hardcodeado
+ * que no corresponda a la wallet actual del usuario.
+ */
+async function resolveWalletIdByPublicKey(stellarPublicKey: string): Promise<string | null> {
+  try {
+    const res = await etherfuseFetch("/ramp/wallets", { method: "GET" });
+    const { json } = await etherfuseReadBody<{ items?: Record<string, unknown>[] }>(res);
+    if (!res.ok) return null;
+    const target = normalizeStellarPublicKey(stellarPublicKey);
+    for (const row of json?.items ?? []) {
+      const pk = typeof row.publicKey === "string" ? row.publicKey : typeof row.public_key === "string" ? row.public_key : null;
+      if (!pk) continue;
+      const bc = String(typeof row.blockchain === "string" ? row.blockchain : "").toLowerCase();
+      if (bc && bc !== "stellar") continue;
+      if (normalizeStellarPublicKey(pk) === target) {
+        const wid = typeof row.walletId === "string" ? row.walletId : typeof row.wallet_id === "string" ? row.wallet_id : null;
+        return wid;
+      }
+    }
+  } catch {
+    // red no disponible
+  }
+  return null;
+}
+
+/** Si el listado org incluye la cuenta Stellar en la fila, filtramos sin depender solo de walletId. */
+function orderRowMatchesStellarPublicKey(
+  row: Record<string, unknown>,
+  target: string,
+): boolean {
+  const want = normalizeStellarPublicKey(target);
+  for (const k of [
+    "publicKey",
+    "public_key",
+    "walletPublicKey",
+    "wallet_public_key",
+    "stellarPublicKey",
+    "stellar_public_key",
+    "cryptoWalletPublicKey",
+  ] as const) {
+    const v = row[k];
+    if (typeof v === "string" && normalizeStellarPublicKey(v) === want) return true;
+  }
+  return false;
+}
+
 function investAllowed(): boolean {
   if (process.env.NODE_ENV !== "production") return true;
   return process.env.SEYF_ALLOW_MOCK_INVEST === "true";
@@ -33,7 +84,9 @@ function etherfuseRampAllowed(): boolean {
 
 function mapEstado(status: string | null): MovimientoEstado {
   const s = (status ?? "").toLowerCase();
-  if (["completed", "funded", "success"].includes(s)) return "completado";
+  // "completed"/"success" = CETES entregados a la wallet
+  if (["completed", "success"].includes(s)) return "completado";
+  // "funded" = MXN recibido pero CETES aún en proceso
   if (["failed", "canceled", "cancelled", "rejected"].includes(s)) {
     return "fallido";
   }
@@ -183,6 +236,11 @@ export type FetchUserMovementsOptions = {
   etherfuseMaxPages?: number;
   /** Límite de filas ledger; por defecto 80. */
   ledgerRunsLimit?: number;
+  /**
+   * Clave pública Stellar del usuario. Necesaria para filtrar órdenes por
+   * walletId cuando el endpoint de customer devuelve vacío (sandbox org-level).
+   */
+  walletPublicKey?: string | null;
 };
 
 /**
@@ -194,24 +252,61 @@ export async function fetchUserMovements(
 ): Promise<UserMovement[]> {
   const ledgerLimit = options?.ledgerRunsLimit ?? 80;
   const etherfusePages = options?.etherfuseMaxPages;
+  const walletPublicKey =
+    options?.walletPublicKey?.trim() || ctx?.publicKey?.trim() || null;
 
   const out: UserMovement[] = [];
 
   if (investAllowed()) {
-    const runs = await listRuns(ledgerLimit);
+    const runs = walletPublicKey
+      ? await listRunsForUser(walletPublicKey, ledgerLimit)
+      : [];
     out.push(...runs.map(ledgerRunToMovement));
   }
 
-  if (ctx && etherfuseRampAllowed()) {
+  if (etherfuseRampAllowed()) {
     try {
-      const rows =
-        etherfusePages != null
-          ? await fetchCustomerOrdersAllPages(ctx.customerId, etherfusePages)
-          : await fetchCustomerOrdersAllPages(ctx.customerId);
+      let rows: Awaited<ReturnType<typeof fetchCustomerOrdersAllPages>> = [];
+      if (ctx) {
+        rows =
+          etherfusePages != null
+            ? await fetchCustomerOrdersAllPages(ctx.customerId, etherfusePages)
+            : await fetchCustomerOrdersAllPages(ctx.customerId);
+      }
+      // Fallback sandbox: órgenes a nivel org — nunca devolver todo el listado sin filtrar.
+      if (rows.length === 0) {
+        const orgRows = await fetchOrgOrdersAllPages(etherfusePages ?? 20);
+        if (walletPublicKey && orgRows.length > 0) {
+          const userWalletId = await resolveWalletIdByPublicKey(walletPublicKey);
+          let filtered = userWalletId
+            ? orgRows.filter((r) => {
+                const wid =
+                  typeof r.walletId === "string"
+                    ? r.walletId
+                    : typeof r.wallet_id === "string"
+                      ? r.wallet_id
+                      : null;
+                return wid === userWalletId;
+              })
+            : [];
+          if (filtered.length === 0) {
+            filtered = orgRows.filter((r) =>
+              orderRowMatchesStellarPublicKey(r as Record<string, unknown>, walletPublicKey),
+            );
+          }
+          rows = filtered;
+        } else {
+          rows = [];
+        }
+      }
+      const seenEf = new Set<string>();
       for (const row of rows) {
         if (row && typeof row === "object") {
           const m = etherfuseRowToMovement(row as Record<string, unknown>);
-          if (m) out.push(m);
+          if (m && !seenEf.has(m.id)) {
+            seenEf.add(m.id);
+            out.push(m);
+          }
         }
       }
     } catch {

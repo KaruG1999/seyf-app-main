@@ -109,8 +109,13 @@ export default function DashboardClient({
   const [referralDismissCount, setReferralDismissCount] = useState(0)
   const [referralHiddenUntil, setReferralHiddenUntil] = useState(0)
 
+  const dashboardSwrKey =
+    wallet?.stellarAddress?.trim().length === 56 && wallet.stellarAddress.startsWith('G')
+      ? `/api/seyf/dashboard?wallet=${encodeURIComponent(wallet.stellarAddress.trim())}`
+      : '/api/seyf/dashboard'
+
   const { data = vm, error, mutate } = useSWR<DashboardViewModel>(
-    '/api/seyf/dashboard',
+    wallet?.stellarAddress ? dashboardSwrKey : '/api/seyf/dashboard',
     dashboardFetcher,
     {
       fallbackData: vm,
@@ -191,17 +196,31 @@ export default function DashboardClient({
               action: 'Verificar ahora',
             }
 
+  const lastBonusWalletKeyRef = useRef<string>('')
   useEffect(() => {
     if (activeCycle) return
-    void fetch('/api/seyf/etherfuse/bonus/welcome', { cache: 'no-store' })
+    const addr = wallet?.stellarAddress?.trim() ?? ''
+    const walletKey = addr || '(none)'
+    if (lastBonusWalletKeyRef.current !== walletKey) {
+      lastBonusWalletKeyRef.current = walletKey
+      setWelcomeBonusMessage(null)
+    }
+    const bonusUrl = addr
+      ? `/api/seyf/etherfuse/bonus/welcome?wallet=${encodeURIComponent(addr)}`
+      : '/api/seyf/etherfuse/bonus/welcome'
+    void fetch(bonusUrl, { cache: 'no-store' })
       .then(async (r) => {
         const j = (await r.json().catch(() => ({}))) as {
           claimed?: boolean
           claim?: { amountMxn?: number }
         }
-        if (!r.ok) return
-        if (j.claimed) {
-          setWelcomeBonusClaimed(true)
+        if (!r.ok) {
+          setWelcomeBonusClaimed(false)
+          return
+        }
+        const claimed = Boolean(j.claimed)
+        setWelcomeBonusClaimed(claimed)
+        if (claimed) {
           setWelcomeBonusMessage(
             typeof j.claim?.amountMxn === 'number'
               ? `Bono activado por ${formatMXN(j.claim.amountMxn)} en testnet.`
@@ -210,9 +229,9 @@ export default function DashboardClient({
         }
       })
       .catch(() => {
-        // noop
+        setWelcomeBonusClaimed(false)
       })
-  }, [activeCycle])
+  }, [activeCycle, wallet?.stellarAddress])
 
   useEffect(() => {
     try {
@@ -229,18 +248,39 @@ export default function DashboardClient({
     setWelcomeBonusBusy(true)
     setWelcomeBonusMessage(null)
     try {
+      const addr = wallet?.stellarAddress?.trim() ?? ''
+      if (!addr) {
+        setWelcomeBonusMessage('Conecta tu wallet Pollar y espera a que cargue la dirección antes de activar el bono.')
+        return
+      }
       const r = await fetch('/api/seyf/etherfuse/bonus/welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: addr }),
       })
       const j = (await r.json().catch(() => ({}))) as {
         ok?: boolean
         alreadyClaimed?: boolean
         amountMxn?: number
-        error?: { message_es?: string }
+        error?: { message_es?: string; code?: string }
+        debug_message?: string
       }
       if (!r.ok || !j.ok) {
-        setWelcomeBonusMessage(j.error?.message_es ?? `No se pudo activar el bono (HTTP ${r.status}).`)
+        setWelcomeBonusMessage(
+          j.error?.message_es ??
+            (typeof j.debug_message === 'string' ? j.debug_message : null) ??
+            `No se pudo activar el bono (HTTP ${r.status}).`,
+        )
+        try {
+          const sync = await fetch(
+            `/api/seyf/etherfuse/bonus/welcome?wallet=${encodeURIComponent(addr)}`,
+            { cache: 'no-store' },
+          )
+          const sj = (await sync.json().catch(() => ({}))) as { claimed?: boolean }
+          if (sync.ok) setWelcomeBonusClaimed(Boolean(sj.claimed))
+        } catch {
+          setWelcomeBonusClaimed(false)
+        }
         return
       }
       setWelcomeBonusClaimed(true)
@@ -511,7 +551,7 @@ export default function DashboardClient({
               <p className="mt-2 text-xs leading-relaxed text-[#d2e9df]">
                 Creamos una orden onramp de prueba y simulamos el depósito para fondear tu wallet y probar la app.
               </p>
-              <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              <div className="mt-4">
                 <Button
                   type="button"
                   onClick={() => void claimWelcomeBonus()}
@@ -523,13 +563,6 @@ export default function DashboardClient({
                     : welcomeBonusClaimed
                       ? 'Bono activado'
                       : 'Activar bono'}
-                </Button>
-                <Button
-                  asChild
-                  variant="secondary"
-                  className="h-10 rounded-full border border-white/20 bg-white/10 px-4 text-sm font-bold text-white hover:bg-white/20"
-                >
-                  <Link href="/anadir">Ver depósito</Link>
                 </Button>
               </div>
               {welcomeBonusMessage ? (

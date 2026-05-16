@@ -7,9 +7,10 @@ import { AppPageBody } from '@/components/app/app-page-body'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
-import { OrderTransactionDetailCard, pickQuoteId } from '@/components/app/dev/etherfuse-order-cards'
+import { OrderTransactionDetailCard } from '@/components/app/dev/etherfuse-order-cards'
 import { SpeiPaymentCard } from '@/components/app/dev/spei-payment-card'
 import { cn } from '@/lib/utils'
+import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { extractOrderIdFromCreateOrderResponse } from '@/lib/etherfuse/order-create-response'
 import {
   speiDetailsFromOnrampOrderApiJson,
@@ -24,6 +25,7 @@ import {
   etherfuseDepositBlockedCopy,
   parseEtherfuseReadinessJson,
 } from '@/lib/seyf/etherfuse-readiness-cta'
+import { userFacingSeyfApiMessage } from '@/lib/seyf/parse-seyf-fetch-error'
 
 type RampContextPayload = {
   kycApproved: boolean
@@ -31,10 +33,18 @@ type RampContextPayload = {
   kycReason: string | null
 }
 
-export default function EtherfuseRampDevClient() {
+export type EtherfuseRampDevClientProps = {
+  /**
+   * - `landing`: solo CTA hacia /anadir/monto (evita tarjetas que parecen botón).
+   * - `deposit`: formulario de monto + flujo SPEI (por defecto si no se pasa `anadirScreen`).
+   */
+  anadirScreen?: 'landing' | 'deposit'
+}
+
+export default function EtherfuseRampDevClient({ anadirScreen = 'deposit' }: EtherfuseRampDevClientProps) {
+  const { wallet, etherfusePublicKeyHint } = useSeyfWallet()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [targetOverride, setTargetOverride] = useState('')
   const [sourceAmount, setSourceAmount] = useState('500')
   const [orderJson, setOrderJson] = useState<string>('')
   const [fiatJson, setFiatJson] = useState<string>('')
@@ -124,55 +134,6 @@ export default function EtherfuseRampDevClient() {
     }
   }, [])
 
-  const performQuote = useCallback(async (): Promise<string> => {
-    const body: { sourceAmount: string; targetAsset?: string } = {
-      sourceAmount: sourceAmount.trim() || '500',
-    }
-    const t = targetOverride.trim()
-    if (t) body.targetAsset = t
-    const res = await fetch('/api/seyf/etherfuse/quote/onramp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      const msg =
-        typeof data.error === 'string'
-          ? data.error
-          : `${res.status} ${res.statusText}${Object.keys(data).length ? ` — ${JSON.stringify(data)}` : ''}`
-      throw new Error(msg)
-    }
-    return JSON.stringify(data, null, 2)
-  }, [sourceAmount, targetOverride])
-
-  const performOrder = useCallback(async (qJson: string): Promise<string> => {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(qJson || '{}')
-    } catch {
-      throw new Error('Cotización JSON inválida')
-    }
-    const inner =
-      parsed && typeof parsed === 'object' && 'quote' in (parsed as object)
-        ? (parsed as { quote: unknown }).quote
-        : parsed
-    const quoteId = pickQuoteId(inner)
-    if (!quoteId) {
-      throw new Error('No encuentro quoteId en la cotización (~2 min de validez)')
-    }
-    const res = await fetch('/api/seyf/etherfuse/order/onramp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quoteId }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new Error(typeof data.error === 'string' ? data.error : res.statusText)
-    }
-    return JSON.stringify(data, null, 2)
-  }, [])
-
   const performFiatSimulation = useCallback(async (oJson: string): Promise<string> => {
     let parsed: unknown
     try {
@@ -193,7 +154,7 @@ export default function EtherfuseRampDevClient() {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      throw new Error(typeof data.error === 'string' ? data.error : res.statusText)
+      throw new Error(userFacingSeyfApiMessage(data, res.status))
     }
 
     let orderPolled: unknown = null
@@ -232,12 +193,20 @@ export default function EtherfuseRampDevClient() {
 
   const openManualSpeiReview = () =>
     run('spei-manual-prepare', async () => {
-      const q = await performQuote()
-      const o = await performOrder(q)
-      const assetLabel =
-        targetOverride.trim()
-          ? targetOverride.trim().split(':')[0]?.trim() || 'CETES'
-          : 'CETES'
+      const body: { sourceAmount: string; targetAsset?: string } = {
+        sourceAmount: sourceAmount.trim() || '500',
+      }
+      const res = await fetch('/api/seyf/etherfuse/onramp/prepare-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(userFacingSeyfApiMessage(data, res.status))
+      }
+      const o = JSON.stringify(data, null, 2)
+      const assetLabel = 'CETES'
       const details = speiDetailsFromOnrampOrderApiJson(o, assetLabel, 'Etherfuse')
       if (!details) {
         throw new Error(
@@ -316,25 +285,76 @@ export default function EtherfuseRampDevClient() {
 
   const showDepositProgress = Boolean(speiDetails || fiatJson || onrampTxSignature)
 
-  return (
-    <AppPageBody className="space-y-6 pt-4">
-      <AppBackLink href="/dashboard" />
+  if (anadirScreen === 'landing') {
+    return (
+      <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
+        <AppBackLink href="/dashboard" />
 
-      <section className="relative overflow-hidden rounded-[1.5rem] border border-[#bfd6ca] bg-gradient-to-br from-[#edf6f2] via-[#e6f0ea] to-[#dce9e3] p-5 dark:border-[#2b4a43] dark:bg-gradient-to-br dark:from-[#0d3531] dark:via-[#15534a] dark:to-[#1f6559]">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#9ec7b3]/25 blur-3xl dark:bg-[#6ba690]/25" />
-        <div className="pointer-events-none absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-[#b8b8b5]/20 blur-3xl dark:bg-[#22433c]/40" />
-        <div className="relative">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="inline-flex rounded-full border border-[#b8b8b5]/60 bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5f7168] dark:border-white/20 dark:bg-white/15 dark:text-[#d2e9df]">
-            Depósito SPEI
-            </p>
-          </div>
-          <h1 className="text-2xl font-black tracking-tight text-[#41534b] dark:text-white">Añadir fondos</h1>
-          <p className="mt-1.5 text-sm text-[#7b8f86] dark:text-[#d2e9df]">
-            Depósito por SPEI: mismo uso que transferir a una cuenta CLABE desde tu banco.
+        {!canOperate ? (
+          <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
+            <p className="text-sm font-bold text-foreground">{depositBlocked.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{depositBlocked.lead}</p>
+            {readinessReasons.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                {readinessReasons.slice(0, 5).map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 flex flex-col gap-2">
+              <Link
+                href={depositBlocked.primaryLink.href}
+                className="inline-flex text-sm font-semibold text-foreground underline"
+              >
+                {depositBlocked.primaryLink.label}
+              </Link>
+              {depositBlocked.extraLinks.map((item) => (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className="inline-flex text-xs font-medium text-muted-foreground underline decoration-muted-foreground/60"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-4 rounded-[1.5rem] border border-border bg-card p-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                Depósito SPEI
+              </p>
+              <h1 className="mt-2 text-xl font-black tracking-tight text-foreground sm:text-2xl">
+                Añadir fondos
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Indica en el siguiente paso cuánto vas a enviar; generamos la cotización y te mostramos la CLABE,
+                el beneficiario y el importe exacto para hacer la transferencia desde tu banco.
+              </p>
+            </div>
+            <Button
+              asChild
+              size="lg"
+              className="h-14 w-full rounded-2xl text-base font-bold shadow-md"
+            >
+              <Link href="/anadir/monto">Genera datos de depósito</Link>
+            </Button>
+          </section>
+        )}
+
+        {err && (
+          <p className="rounded-[1rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {err}
           </p>
-        </div>
-      </section>
+        )}
+      </AppPageBody>
+    )
+  }
+
+  return (
+    <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
+      <AppBackLink href="/anadir" />
 
       {!canOperate ? (
         <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
@@ -368,29 +388,30 @@ export default function EtherfuseRampDevClient() {
       ) : null}
 
       {canOperate ? (
-        <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-5 dark:border-border dark:bg-card/80">
+        <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-4 dark:border-border dark:bg-card/80 sm:p-5">
+          {wallet && !etherfusePublicKeyHint ? (
+            <p className="rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100/90">
+              Tu sesión Pollar muestra un identificador que aún no es una clave Stellar <span className="font-mono">G…</span> reconocible
+              por Etherfuse. El depósito usará la sesión de <Link href="/identidad" className="font-semibold underline">/identidad</Link>.
+              Si el error persiste, abre devnet y confirma KYC y cuenta bancaria.
+            </p>
+          ) : null}
           <div>
             <h2 className="text-base font-bold text-foreground">¿Cuánto vas a depositar?</h2>
             <p className="mt-1 text-xs text-muted-foreground">
-              Escribe el monto en pesos. Generamos la cotización y te mostramos CLABE e importe exacto.
+              Monto en pesos. Necesitamos el importe exacto para generar los datos de transferencia SPEI.
             </p>
           </div>
           <Input
             id="manual-amount"
+            name="deposit-amount-mxn"
+            autoComplete="off"
             inputMode="decimal"
             value={sourceAmount}
             onChange={(e) => setSourceAmount(e.target.value)}
             placeholder="Ej. 500.00"
             className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
             aria-label="Monto en pesos mexicanos"
-          />
-          <Input
-            id="manual-asset"
-            value={targetOverride}
-            onChange={(e) => setTargetOverride(e.target.value)}
-            placeholder="Activo (opcional, avanzado)"
-            className="h-11 rounded-xl border-border bg-background px-3 font-mono text-xs"
-            aria-label="Referencia de activo opcional"
           />
           <Button
             type="button"
@@ -401,10 +422,10 @@ export default function EtherfuseRampDevClient() {
             {busy === 'spei-manual-prepare' ? (
               <>
                 <Spinner className="size-4 text-background" />
-                Preparando datos…
+                Generando datos…
               </>
             ) : (
-              'Ver datos para transferir'
+              'Genera datos de depósito'
             )}
           </Button>
         </section>
@@ -418,14 +439,13 @@ export default function EtherfuseRampDevClient() {
       {speiDetails && pendingManualOrderJson ? (
         <Button
           type="button"
-          variant="secondary"
-          className="h-12 w-full rounded-2xl border border-border font-semibold"
+          className="h-12 w-full rounded-2xl border border-[#1b6155]/40 bg-gradient-to-br from-[#15534a] to-[#1b6155] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(21,83,74,0.35)] hover:from-[#1a5f52] hover:to-[#1f6d61] disabled:opacity-60 dark:border-emerald-950/30 dark:shadow-[0_8px_28px_rgba(8,42,36,0.45)]"
           disabled={!!busy || !canOperate}
           onClick={() => void confirmSpeiPayment()}
         >
           {speiConfirmBusy ? (
             <>
-              <Spinner className="size-4" />
+              <Spinner className="size-4 text-white" />
               Procesando…
             </>
           ) : (

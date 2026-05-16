@@ -26,6 +26,8 @@ export async function GET() {
           approvedAt: live.data.approvedAt,
           currentRejectionReason: live.data.currentRejectionReason,
         })
+      } else if (live.reason === 'not_found') {
+        snapshot = null
       }
     } catch {
       // keep fallback snapshot

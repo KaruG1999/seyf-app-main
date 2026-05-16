@@ -1,5 +1,4 @@
-import { mkdir, readFile, writeFile } from 'fs/promises'
-import path from 'path'
+import { Redis } from '@upstash/redis'
 
 type WelcomeBonusRow = {
   customerId: string
@@ -8,35 +7,32 @@ type WelcomeBonusRow = {
   claimedAt: string
 }
 
-type WelcomeBonusStore = {
-  rows: WelcomeBonusRow[]
+function getRedis(): Redis {
+  return Redis.fromEnv()
 }
 
-function storePath() {
-  return path.join(process.cwd(), 'data', 'seyf-welcome-bonus.json')
+function bonusKey(customerId: string): string {
+  return `seyf:bonus:welcome:${customerId}`
 }
 
-async function loadStore(): Promise<WelcomeBonusStore> {
+export async function getWelcomeBonusClaimByCustomerId(
+  customerId: string,
+): Promise<WelcomeBonusRow | null> {
   try {
-    const raw = await readFile(storePath(), 'utf-8')
-    const parsed = JSON.parse(raw) as WelcomeBonusStore
-    if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.rows)) {
-      return { rows: [] }
-    }
-    return parsed
+    const redis = getRedis()
+    return await redis.get<WelcomeBonusRow>(bonusKey(customerId))
   } catch {
-    return { rows: [] }
+    return null
   }
 }
 
-async function saveStore(store: WelcomeBonusStore): Promise<void> {
-  await mkdir(path.dirname(storePath()), { recursive: true })
-  await writeFile(storePath(), JSON.stringify(store, null, 2), 'utf-8')
-}
-
-export async function getWelcomeBonusClaimByCustomerId(customerId: string): Promise<WelcomeBonusRow | null> {
-  const store = await loadStore()
-  return store.rows.find((x) => x.customerId === customerId) ?? null
+export async function clearWelcomeBonusClaimByCustomerId(customerId: string): Promise<void> {
+  try {
+    const redis = getRedis()
+    await redis.del(bonusKey(customerId))
+  } catch {
+    // ignorar
+  }
 }
 
 export async function upsertWelcomeBonusClaim(params: {
@@ -44,18 +40,13 @@ export async function upsertWelcomeBonusClaim(params: {
   orderId: string
   amountMxn: number
 }): Promise<void> {
-  const store = await loadStore()
-  const idx = store.rows.findIndex((x) => x.customerId === params.customerId)
+  const redis = getRedis()
   const row: WelcomeBonusRow = {
     customerId: params.customerId,
     orderId: params.orderId,
     amountMxn: params.amountMxn,
     claimedAt: new Date().toISOString(),
   }
-  if (idx >= 0) {
-    store.rows[idx] = row
-  } else {
-    store.rows.unshift(row)
-  }
-  await saveStore(store)
+  // TTL 365 días — el bono es permanente pero el store no necesita ser eterno en testnet
+  await redis.set(bonusKey(params.customerId), row, { ex: 60 * 60 * 24 * 365 })
 }

@@ -24,6 +24,9 @@ export default async function IdentidadPage() {
         if (r.data.status === 'approved' || r.data.status === 'approved_chain_deploying') {
           await triggerWalletProvisioning(session.customerId)
         }
+      } else if (r.reason === 'not_found') {
+        // Etherfuse ya no tiene KYC para esta llave: no mostrar un "approved" viejo del caché.
+        initialKyc = null
       }
     } catch {
       // Fallback a último estado guardado (webhook/local cache).

@@ -1,13 +1,23 @@
 import { fetchEtherfuseKycStatus, type EtherfuseKycStatus } from '@/lib/etherfuse/kyc'
 import { AppError } from '@/lib/seyf/api-error'
+import { isPublicStellarTestnet } from '@/lib/seyf/stellar-wallet-network'
 
 const APPROVED_KYC_STATUSES: ReadonlySet<EtherfuseKycStatus> = new Set([
   'approved',
   'approved_chain_deploying',
 ])
 
+// En sandbox Etherfuse el KYC nunca pasa de "compliant" (normalizado a "proposed").
+// En testnet permitimos "proposed" como equivalente a aprobado.
+const TESTNET_APPROVED_KYC_STATUSES: ReadonlySet<EtherfuseKycStatus> = new Set([
+  'approved',
+  'approved_chain_deploying',
+  'proposed',
+])
+
 export function isEtherfuseKycApprovedStatus(status: EtherfuseKycStatus): boolean {
-  return APPROVED_KYC_STATUSES.has(status)
+  const set = isPublicStellarTestnet() ? TESTNET_APPROVED_KYC_STATUSES : APPROVED_KYC_STATUSES
+  return set.has(status)
 }
 
 export type EtherfuseIdentityContext = {

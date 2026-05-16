@@ -17,7 +17,13 @@ import {
   normalizeStellarPublicKey,
 } from '@/lib/etherfuse/stellar-public-key'
 import { AppError, toErrorResponse } from '@/lib/seyf/api-error'
+import { rateLimitResponse } from '@/lib/seyf/redis-guards'
 import { normalizeDateOfBirthToIso } from '@/lib/seyf/normalize-date-of-birth'
+import {
+  isEtherfuseTestnetBankAutofillActive,
+  getTestnetSyntheticClabe,
+} from '@/lib/seyf/etherfuse-testnet-bank-autofill'
+import { createCustomerBankAccount } from '@/lib/etherfuse/bank-accounts'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -31,9 +37,9 @@ const bodySchema = z.object({
   publicKey: z.string().trim().min(1),
   identity: z.object({
     id: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
-    email: z.preprocess(emptyToUndefined, z.string().trim().email().optional()),
-    phoneNumber: z.preprocess(emptyToUndefined, z.string().trim().min(5).optional()),
-    occupation: z.preprocess(emptyToUndefined, z.string().trim().min(2).optional()),
+    email: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+    phoneNumber: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+    occupation: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
     name: z.object({
       givenName: z.string().trim().min(1),
       familyName: z.string().trim().min(1),
@@ -50,7 +56,8 @@ const bodySchema = z.object({
       city: z.string().trim().min(1),
       region: z.string().trim().min(1),
       postalCode: z.string().trim().min(1),
-      country: z.string().trim().length(2),
+      // accept up to 3 chars and slice to 2 — prevents length(2) failure if user typed extra chars
+      country: z.string().trim().min(2).transform((s) => s.slice(0, 2).toUpperCase()),
     }),
     idNumbers: z
       .array(
@@ -60,7 +67,9 @@ const bodySchema = z.object({
           value: z.string().trim().min(1),
         }),
       )
-      .min(1),
+      // filter out entries with empty value before validating min(1) array length
+      .transform((arr) => arr.filter((x) => x.value.trim().length > 0))
+      .pipe(z.array(z.object({ id: z.string().optional(), type: z.string(), value: z.string() })).min(1)),
   }),
 })
 
@@ -78,10 +87,26 @@ function mapKycProviderSetupError(message: string): AppError | null {
         'No encontramos tu organización en Etherfuse para esta API key/entorno. Revisa ETHERFUSE_API_BASE_URL y ETHERFUSE_API_KEY.',
     })
   }
+  if (
+    m.includes('cannot claim a wallet') ||
+    m.includes('registered to another organization') ||
+    m.includes('claimed by a different organization')
+  ) {
+    return new AppError('validation_error', {
+      statusCode: 400,
+      retryable: false,
+      messageEs:
+        'Esta wallet ya está asociada a otra organización de Etherfuse. Conecta la wallet correcta para este entorno o cambia la API key/organización activa antes de continuar.',
+      message,
+    })
+  }
   return null
 }
 
 export async function POST(req: Request) {
+  // 5 intentos por IP cada 10 minutos — evita fuerza bruta en KYC
+  const limited = await rateLimitResponse(req, 'kyc/submit', { limit: 5, windowSec: 600 })
+  if (limited) return limited
   try {
     const raw = (await req.json().catch(() => null)) as unknown
     const parsed = bodySchema.safeParse(raw)
@@ -102,9 +127,16 @@ export async function POST(req: Request) {
       })
     }
 
-    const existing = await getEtherfuseOnboardingSession()
+    // Redis-first: pasa publicKey para buscar sesión guardada por wallet
+    const existing = await getEtherfuseOnboardingSession(publicKey)
     const fresh = newEtherfuseOnboardingIds()
     const ids = resolveOnboardingIds(existing, publicKey, fresh)
+    const hasMatchingSession =
+      !!existing &&
+      normalizeStellarPublicKey(existing.publicKey) === publicKey &&
+      !!existing.customerId &&
+      !!existing.bankAccountId
+
     await saveEtherfuseOnboardingSession({
       customerId: ids.customerId,
       bankAccountId: ids.bankAccountId,
@@ -128,28 +160,44 @@ export async function POST(req: Request) {
         throw e
       }
     }
-    // Ensure customer/bank-account context exists in Etherfuse before programmatic KYC submit.
-    let resolved: { customerId: string; bankAccountId: string; presignedUrl: string }
-    try {
-      resolved = await generateOnboardingPresignedUrlResolving409({
-        customerId: ids.customerId,
-        bankAccountId: ids.bankAccountId,
+    /**
+     * Resuelve customerId/bankAccountId garantizando que existan en el org activo.
+     * Si hay sesión guardada (cookie) pero el customerId ya no existe en Etherfuse
+     * (p.ej. cambio de org/API key), se descarta y se genera contexto fresco.
+     */
+    const resolveOnboardingContext = async (useStaleSession: boolean) => {
+      const baseIds = useStaleSession ? ids : newEtherfuseOnboardingIds()
+      const resolved = await generateOnboardingPresignedUrlResolving409({
+        customerId: baseIds.customerId,
+        bankAccountId: baseIds.bankAccountId,
         publicKey,
       })
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      const mapped = mapKycProviderSetupError(msg)
-      if (mapped) throw mapped
-      throw e
+      await saveEtherfuseOnboardingSession({
+        customerId: resolved.customerId,
+        bankAccountId: resolved.bankAccountId,
+        publicKey,
+      })
+      return { customerId: resolved.customerId, bankAccountId: resolved.bankAccountId }
     }
-    await saveEtherfuseOnboardingSession({
-      customerId: resolved.customerId,
-      bankAccountId: resolved.bankAccountId,
-      publicKey,
-    })
 
-    const submission = await submitEtherfuseKycIdentityData({
-      customerId: resolved.customerId,
+    let resolvedCustomerId = ids.customerId
+    let resolvedBankAccountId = ids.bankAccountId
+
+    if (!hasMatchingSession) {
+      try {
+        const ctx = await resolveOnboardingContext(true)
+        resolvedCustomerId = ctx.customerId
+        resolvedBankAccountId = ctx.bankAccountId
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        const mapped = mapKycProviderSetupError(msg)
+        if (mapped) throw mapped
+        throw e
+      }
+    }
+
+    const buildIdentityPayload = () => ({
+      customerId: resolvedCustomerId,
       pubkey: publicKey,
       identity: {
         ...parsed.data.identity,
@@ -173,28 +221,123 @@ export async function POST(req: Request) {
       },
     })
 
+    let submission: Awaited<ReturnType<typeof submitEtherfuseKycIdentityData>>
+    try {
+      submission = await submitEtherfuseKycIdentityData(buildIdentityPayload())
+    } catch (submitErr) {
+      const submitMsg = submitErr instanceof Error ? submitErr.message : String(submitErr)
+      const submitMsgLow = submitMsg.toLowerCase()
+      // Sesión stale (org cambió) — regenerar contexto fresco e intentar de nuevo
+      if (submitMsgLow.includes('organization not found') || submitMsgLow.includes('customer not found')) {
+        console.warn('[kyc/submit] stale session detected, regenerating onboarding context and retrying')
+        try {
+          const freshCtx = await resolveOnboardingContext(false)
+          resolvedCustomerId = freshCtx.customerId
+          resolvedBankAccountId = freshCtx.bankAccountId
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e)
+          const mapped = mapKycProviderSetupError(msg)
+          if (mapped) throw mapped
+          throw e
+        }
+        submission = await submitEtherfuseKycIdentityData(buildIdentityPayload())
+      } else if (
+        // KYC ya enviado/aprobado — no es error, retornar el status actual
+        submitMsgLow.includes('already') ||
+        submitMsgLow.includes('kyc') ||
+        submitMsgLow.includes('proposed') ||
+        submitMsgLow.includes('approved') ||
+        submitMsgLow.includes('compliant') ||
+        submitMsgLow.includes('in review') ||
+        submitMsgLow.includes('submitted')
+      ) {
+        console.info('[kyc/submit] KYC ya existente, tratando como éxito:', submitMsg)
+        submission = { status: 'proposed', message: null }
+      } else {
+        throw submitErr
+      }
+    }
+
+    // Testnet: crear cuenta bancaria automáticamente con CLABE sintética
+    // Se hace server-side para garantizar que el bankAccountId quede registrado en Etherfuse
+    let bankAccountId = resolvedBankAccountId
+    if (isEtherfuseTestnetBankAutofillActive()) {
+      try {
+        const clabe = getTestnetSyntheticClabe()
+        const identity = parsed.data.identity
+        const nameParts = identity.name.familyName.trim().split(/\s+/)
+        const firstName = identity.name.givenName.trim()
+        const paternalLastName = nameParts[0] ?? firstName
+        const maternalLastName = nameParts[1] ?? nameParts[0] ?? 'X'
+        const curpEntry = identity.idNumbers.find((n) => n.type === 'mx_curp')
+        const rfcEntry = identity.idNumbers.find((n) => n.type === 'mx_rfc')
+        // dateOfBirth ya transformado a YYYY-MM-DD, convertir a YYYYMMDD
+        const birthDate = identity.dateOfBirth.replace(/-/g, '')
+
+        if (curpEntry?.value && rfcEntry?.value && /^\d{8}$/.test(birthDate)) {
+          const bankAccount = await createCustomerBankAccount(resolvedCustomerId, {
+            bankAccountId: resolvedBankAccountId,
+            registration: {
+              kind: 'personal',
+              account: {
+                firstName,
+                paternalLastName,
+                maternalLastName,
+                birthDate,
+                birthCountryIsoCode: 'MX',
+                curp: curpEntry.value.trim().toUpperCase(),
+                rfc: rfcEntry.value.trim().toUpperCase(),
+                clabe,
+              },
+            },
+            label: 'seyf-testnet-synthetic',
+          })
+          bankAccountId = bankAccount.bankAccountId
+          // Actualizar sesión con el bankAccountId real registrado en Etherfuse
+          await saveEtherfuseOnboardingSession({
+            customerId: resolvedCustomerId,
+            bankAccountId,
+            publicKey,
+          })
+          console.info('[kyc/submit] cuenta bancaria testnet creada:', bankAccountId)
+        }
+      } catch (bankErr) {
+        const bankMsg = bankErr instanceof Error ? bankErr.message : String(bankErr)
+        // Si ya existe (409 / "already") continuar con el bankAccountId que teníamos
+        if (
+          bankMsg.toLowerCase().includes('already') ||
+          bankMsg.includes('409') ||
+          bankMsg.toLowerCase().includes('duplicate')
+        ) {
+          console.info('[kyc/submit] cuenta bancaria testnet ya existe, reutilizando:', resolvedBankAccountId)
+        } else {
+          console.warn('[kyc/submit] no se pudo crear cuenta bancaria testnet:', bankMsg)
+        }
+      }
+    }
+
     return NextResponse.json(
       {
         ok: true,
-        status: submission.status,
-        message: submission.message,
+        status: submission!.status,
+        message: submission!.message,
+        bankAccountId,
       },
       {
         headers: { 'Cache-Control': 'no-store' },
       },
     )
   } catch (e) {
-    if (process.env.NODE_ENV !== 'production' && e instanceof Error) {
-      const base = toErrorResponse(e, 'kyc/submit')
-      const body = (await base.json()) as { error?: unknown }
-      return NextResponse.json(
-        {
-          ...(typeof body === 'object' && body ? body : {}),
-          debug_message: e.message,
-        },
-        { status: base.status, headers: { 'Cache-Control': 'no-store' } },
-      )
-    }
-    return toErrorResponse(e, 'kyc/submit')
+    const base = toErrorResponse(e, 'kyc/submit')
+    // Always include debug_message so Vercel logs + client console show the exact failure
+    const body = (await base.json()) as { error?: unknown }
+    const debugMsg = e instanceof Error ? e.message : String(e)
+    return NextResponse.json(
+      {
+        ...(typeof body === 'object' && body ? body : {}),
+        debug_message: debugMsg,
+      },
+      { status: base.status, headers: { 'Cache-Control': 'no-store' } },
+    )
   }
 }

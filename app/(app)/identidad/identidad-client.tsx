@@ -22,11 +22,14 @@ import { normalizeDateOfBirthToIso } from '@/lib/seyf/normalize-date-of-birth'
 import { isPublicStellarTestnet } from '@/lib/seyf/stellar-wallet-network'
 import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { useEnsureCetesTrustline } from '@/lib/seyf/use-ensure-cetes-trustline'
+import {
+  MAX_KYC_IMAGE_FILE_BYTES,
+  kycDocumentsFailureMessageEs,
+} from '@/lib/seyf/kyc-upload-limits'
 
 const KYC_PENDING_UI_KEY = 'seyf_kyc_pending_ui'
 /** Datos del formulario KYC para pre-rellenar el alta CLABE cuando el usuario ya esté aprobado. */
 const KYC_BANK_PREFILL_KEY = 'seyf_kyc_bank_prefill_v1'
-const MAX_FILE_BYTES = 10 * 1024 * 1024
 
 /** Tamaño legible para mensajes al usuario (es-MX). */
 function formatFileSizeForUser(bytes: number): string {
@@ -56,8 +59,8 @@ function validateImageFile(file: File | null, label: string): string | null {
   if (!file) return `${label} es requerido.`
   const allowed = ['image/jpeg', 'image/png']
   if (!allowed.includes(file.type)) return `${label} debe ser JPG o PNG.`
-  if (file.size > MAX_FILE_BYTES) {
-    return `${label}: el archivo pesa ${formatFileSizeForUser(file.size)}; el máximo permitido es ${formatFileSizeForUser(MAX_FILE_BYTES)}.`
+  if (file.size > MAX_KYC_IMAGE_FILE_BYTES) {
+    return `${label}: el archivo pesa ${formatFileSizeForUser(file.size)}; el máximo permitido es ${formatFileSizeForUser(MAX_KYC_IMAGE_FILE_BYTES)} (evita errores al subir en móvil).`
   }
   return null
 }
@@ -94,9 +97,9 @@ function KycDocumentPicker({
       input.value = ''
       return
     }
-    if (file.size > MAX_FILE_BYTES) {
+    if (file.size > MAX_KYC_IMAGE_FILE_BYTES) {
       setPickError(
-        `El archivo pesa ${formatFileSizeForUser(file.size)}; el máximo es ${formatFileSizeForUser(MAX_FILE_BYTES)}.`,
+        `El archivo pesa ${formatFileSizeForUser(file.size)}; el máximo es ${formatFileSizeForUser(MAX_KYC_IMAGE_FILE_BYTES)}.`,
       )
       onSelect(null)
       input.value = ''
@@ -119,7 +122,7 @@ function KycDocumentPicker({
     >
       <p className="text-[11px] font-bold leading-snug text-foreground sm:text-xs">{label}</p>
       <p className="mx-auto mt-1.5 max-w-[18rem] text-[10px] leading-snug text-muted-foreground sm:text-[11px]">
-        {hint} · máx. {formatFileSizeForUser(MAX_FILE_BYTES)}
+        {hint} · máx. {formatFileSizeForUser(MAX_KYC_IMAGE_FILE_BYTES)}
       </p>
       <div className="mt-3 w-full min-w-0 px-0.5">
         <Input
@@ -454,6 +457,20 @@ export default function IdentidadClient({
         return
       }
 
+      const countryRaw = String(fd.get('country') ?? 'MX').trim().toUpperCase()
+      const countryCode = countryRaw.slice(0, 2) || 'MX'
+
+      // Only include idNumbers entries that have a non-empty value
+      const rawIdNumbers = [
+        curpValue ? { type: 'mx_curp', value: curpValue } : null,
+        rfcValue ? { type: 'mx_rfc', value: rfcValue } : null,
+      ].filter(Boolean) as Array<{ type: string; value: string }>
+
+      if (rawIdNumbers.length === 0) {
+        setError('Por favor captura tu CURP y RFC para continuar.')
+        return
+      }
+
       const payload = {
         publicKey: connectedPublicKey,
         identity: {
@@ -470,18 +487,9 @@ export default function IdentidadClient({
             city: String(fd.get('city') ?? ''),
             region: String(fd.get('region') ?? ''),
             postalCode: String(fd.get('postalCode') ?? ''),
-            country: String(fd.get('country') ?? ''),
+            country: countryCode,
           },
-          idNumbers: [
-            {
-              type: 'mx_curp',
-              value: curpValue,
-            },
-            {
-              type: 'mx_rfc',
-              value: rfcValue,
-            },
-          ],
+          idNumbers: rawIdNumbers,
         },
       }
       const http = await fetch('/api/seyf/kyc/submit', {
@@ -513,7 +521,16 @@ export default function IdentidadClient({
           fileToDataUrl(idBackFile as File),
           fileToDataUrl(selfieFile as File),
         ])
-        const docsRes = await fetch('/api/seyf/kyc/documents', {
+        /** Dos peticiones: el límite ~4.5 MB de Vercel por request se superaba con 3 fotos en JSON. */
+        const parseDocsJson = async (res: Response) =>
+          (await res.json().catch(() => ({}))) as {
+            ok?: boolean
+            status?: string
+            error?: { message_es?: string }
+            debug_message?: string
+          }
+
+        const docsIneRes = await fetch('/api/seyf/kyc/documents', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -522,25 +539,45 @@ export default function IdentidadClient({
               idFront: { label: 'id_front', image: idFront },
               idBack: { label: 'id_back', image: idBack },
             },
-            selfie: { label: 'selfie', image: selfie },
           }),
         })
-        const docsJson = (await docsRes.json().catch(() => ({}))) as {
-          ok?: boolean
-          status?: string
-          error?: { message_es?: string }
-          debug_message?: string
-        }
-        if (!docsRes.ok || !docsJson.ok) {
-          const detail = docsJson.debug_message
-          if (detail) console.warn('[identidad] documents debug:', detail)
+        const docsIneJson = await parseDocsJson(docsIneRes)
+        if (!docsIneRes.ok || !docsIneJson.ok) {
+          const detail = docsIneJson.debug_message
+          if (detail) console.warn('[identidad] documents (INE) debug:', detail)
           setDocUploadError(
-            docsJson.error?.message_es ??
-              'No pudimos subir tus documentos. Reintenta con imágenes claras.',
+            kycDocumentsFailureMessageEs(
+              docsIneRes.status,
+              'identification',
+              docsIneJson.error?.message_es,
+            ),
           )
           return
         }
-        if (docsJson.status) documentsStatus = docsJson.status
+        if (docsIneJson.status) documentsStatus = docsIneJson.status
+
+        const docsSelfieRes = await fetch('/api/seyf/kyc/documents', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            publicKey: connectedPublicKey,
+            selfie: { label: 'selfie', image: selfie },
+          }),
+        })
+        const docsSelfieJson = await parseDocsJson(docsSelfieRes)
+        if (!docsSelfieRes.ok || !docsSelfieJson.ok) {
+          const detail = docsSelfieJson.debug_message
+          if (detail) console.warn('[identidad] documents (selfie) debug:', detail)
+          setDocUploadError(
+            kycDocumentsFailureMessageEs(
+              docsSelfieRes.status,
+              'selfie',
+              docsSelfieJson.error?.message_es,
+            ),
+          )
+          return
+        }
+        if (docsSelfieJson.status) documentsStatus = docsSelfieJson.status
       } catch (uploadErr) {
         setDocUploadError(
           uploadErr instanceof Error
@@ -605,41 +642,11 @@ export default function IdentidadClient({
         // noop
       }
 
-      const birthCompactForBank = dateOfBirth.replace(/-/g, '')
-      if (isPublicStellarTestnet() && birthCompactForBank.length === 8) {
-        try {
-          const ar = await fetch('/api/seyf/etherfuse/bank-account-testnet-auto', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              firstName: givenName,
-              paternalLastName,
-              maternalLastName,
-              birthDate: birthCompactForBank,
-              curp: curpValue,
-              rfc: rfcValue,
-            }),
-          })
-          if (!ar.ok) {
-            const j = (await ar.json().catch(() => ({}))) as {
-              error?: { message_es?: string }
-              debug_message?: string
-            }
-            console.warn('[identidad] bank autofill', ar.status, j)
-            const hint =
-              j.error?.message_es ??
-              (typeof j.debug_message === 'string' ? j.debug_message : null) ??
-              'No pudimos crear la cuenta de prueba (CLABE sintética). Revisa SEYF_TESTNET_SYNTHETIC_CLABE y los logs.'
-            setDocUploadError(hint)
-          }
-        } catch (e) {
-          console.warn('[identidad] bank autofill', e)
-          setDocUploadError(
-            e instanceof Error
-              ? e.message
-              : 'No pudimos completar el alta bancaria automática en testnet.',
-          )
-        }
+      // En testnet la cuenta bancaria requiere verificación manual en el dashboard de Etherfuse.
+      // La llamada automática a bank-account-testnet-auto está desactivada para evitar
+      // errores falsos post-KYC. El usuario debe crear/verificar la cuenta desde el dashboard.
+      if (isPublicStellarTestnet()) {
+        console.info('[identidad] testnet: omitiendo alta bancaria automática — verificar en dashboard Etherfuse')
       }
 
       setSuccess('Tu información se envió correctamente.')
@@ -1006,14 +1013,11 @@ export default function IdentidadClient({
       ) : null}
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <div className="rounded-[1.25rem] border border-border bg-secondary p-4">
-          <p className="text-xs font-medium text-muted-foreground">Wallet Stellar</p>
-          <p className="mt-2 text-sm text-foreground">
-            {wallet?.publicKey
-              ? `Usaremos tu wallet conectada: ${wallet.publicKey.slice(0, 6)}...${wallet.publicKey.slice(-6)}`
-              : 'Conecta tu wallet para iniciar la verificacion de identidad.'}
-          </p>
-          {!wallet?.publicKey ? (
+        {!wallet?.publicKey ? (
+          <div className="rounded-[1.25rem] border border-border bg-secondary p-4">
+            <p className="text-sm text-muted-foreground">
+              Conecta tu wallet para iniciar la verificación de identidad.
+            </p>
             <Button
               type="button"
               variant="outline"
@@ -1023,8 +1027,8 @@ export default function IdentidadClient({
             >
               {loading ? 'Cargando wallet...' : 'Conectar wallet'}
             </Button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
         {inReview ? (
           <div className="rounded-[1rem] border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-300">
             Tu verificación está en revisión. Mientras tanto, no es necesario reenviar datos.
@@ -1067,8 +1071,9 @@ export default function IdentidadClient({
           />
           <Input
             name="phoneNumber"
-            placeholder="Teléfono (+52...)"
+            placeholder="Teléfono (+521234567890)"
             required
+            minLength={7}
             className="h-12 rounded-xl"
             disabled={!canSubmitForm}
           />
@@ -1100,6 +1105,7 @@ export default function IdentidadClient({
             placeholder="País ISO-2 (MX)"
             defaultValue="MX"
             required
+            maxLength={2}
             className="h-12 rounded-xl uppercase"
             disabled={!canSubmitForm}
           />
@@ -1115,9 +1121,9 @@ export default function IdentidadClient({
         <section className="rounded-[1.25rem] border border-border bg-card/50 p-4 sm:p-5">
           <p className="text-center text-sm font-bold text-foreground">Documentos KYC</p>
           <p className="mx-auto mt-2 max-w-md text-center text-[11px] leading-relaxed text-muted-foreground sm:text-xs">
-            Imágenes claras en JPG o PNG. Tamaño máximo por imagen: {formatFileSizeForUser(MAX_FILE_BYTES)}. Si lo
-            superas, verás un mensaje en rojo en ese recuadro. Si pesa mucho, comprime la foto en tu teléfono o exporta con
-            menor calidad.
+            JPG o PNG, bien iluminadas. Máximo {formatFileSizeForUser(MAX_KYC_IMAGE_FILE_BYTES)} por archivo (así el
+            envío cabe en el servidor). Si una foto viene muy pesada de la galería, comprímela o exporta en calidad media
+            antes de elegirla.
           </p>
           <div className="mt-4 grid gap-4 sm:grid-cols-3 sm:gap-3">
             <KycDocumentPicker

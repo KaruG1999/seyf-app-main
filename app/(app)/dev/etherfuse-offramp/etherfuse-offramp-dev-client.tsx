@@ -1,11 +1,15 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { AppPageBody } from '@/components/app/app-page-body'
 import { OfframpActionCard } from '@/components/app/dev/offramp-action-card'
 import { OrderTransactionDetailCard, pickQuoteId } from '@/components/app/dev/etherfuse-order-cards'
+import {
+  WithdrawSpeiDestination,
+  type WithdrawDestinationSelection,
+} from '@/components/app/withdraw-spei-destination'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
@@ -19,7 +23,6 @@ import {
   extractConfirmedTxSignatureFromOnrampPanelJson,
   pickRampOrderTransactionDetails,
 } from '@/lib/etherfuse/orders-api'
-import { useEffect } from 'react'
 import {
   type EtherfuseReadinessClientPayload,
   etherfuseDepositBlockedCopy,
@@ -43,6 +46,17 @@ export default function EtherfuseOfframpDevClient() {
   const [kycGate, setKycGate] = useState<RampContextPayload | null>(null)
   const [kycLoading, setKycLoading] = useState(true)
   const [readiness, setReadiness] = useState<EtherfuseReadinessClientPayload | null>(null)
+  const [abbrClabeHint, setAbbrClabeHint] = useState<string | null>(null)
+  const [bankAccountLabel, setBankAccountLabel] = useState<string | null>(null)
+  const [destinationValid, setDestinationValid] = useState(true)
+  const [destinationReason, setDestinationReason] = useState<string | null>(null)
+
+  const onDestinationSelectionChange = useCallback((_s: WithdrawDestinationSelection) => {}, [])
+
+  const onDestinationValidity = useCallback((ok: boolean, reason: string | null) => {
+    setDestinationValid(ok)
+    setDestinationReason(reason)
+  }, [])
 
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
     setErr(null)
@@ -123,6 +137,31 @@ export default function EtherfuseOfframpDevClient() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!readiness?.onrampEnabled) return
+    let cancelled = false
+    fetch('/api/seyf/etherfuse/deposit-info')
+      .then(async (r) => {
+        const j = (await r.json().catch(() => ({}))) as {
+          kycReady?: boolean
+          abbrClabe?: string | null
+          bankAccountLabel?: string | null
+        }
+        if (!r.ok || cancelled) return
+        setAbbrClabeHint(typeof j.abbrClabe === 'string' ? j.abbrClabe : null)
+        setBankAccountLabel(typeof j.bankAccountLabel === 'string' ? j.bankAccountLabel : null)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAbbrClabeHint(null)
+          setBankAccountLabel(null)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [readiness?.onrampEnabled])
 
   const performQuote = useCallback(async (): Promise<string> => {
     const body: { sourceAmount: string; sourceAsset?: string } = {
@@ -329,69 +368,94 @@ export default function EtherfuseOfframpDevClient() {
       ) : null}
 
       {canOperate ? (
-        <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-5 dark:border-border dark:bg-card/80">
-          <div>
-            <h2 className="text-base font-bold text-foreground">¿Cuánto quieres retirar?</h2>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Cantidad del activo en tu wallet (el cotizador convierte a pesos para el SPEI).
-            </p>
-          </div>
-          <Input
-            inputMode="decimal"
-            value={sourceAmountTokens}
-            onChange={(e) => setSourceAmountTokens(e.target.value)}
-            placeholder="Ej. 10"
-            className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
-            aria-label="Cantidad del activo a retirar"
-          />
-          <Input
-            value={sourceAssetOverride}
-            onChange={(e) => setSourceAssetOverride(e.target.value)}
-            placeholder="Activo (opcional, avanzado)"
-            className="h-11 rounded-xl border-border bg-background px-3 font-mono text-xs"
-            aria-label="Identificador de activo opcional"
-          />
-          <details className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
-            <summary className="cursor-pointer font-medium text-foreground">Opciones avanzadas (sandbox)</summary>
-            <div className="mt-3 flex items-start gap-3">
-              <Checkbox
-                id="use-anchor"
-                checked={useAnchor}
-                onCheckedChange={(v) => setUseAnchor(v === true)}
-                className="mt-0.5"
-              />
-              <Label
-                htmlFor="use-anchor"
-                className="cursor-pointer leading-relaxed font-normal"
-              >
-                Modo anchor en Stellar (solo pruebas).{' '}
-                <a
-                  href="https://docs.etherfuse.com/guides/testing-offramps#anchor-mode-stellar-only"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-foreground underline underline-offset-2"
-                >
-                  Documentación
-                </a>
-              </Label>
-            </div>
-          </details>
-          <Button
-            type="button"
-            className="h-14 w-full rounded-2xl bg-foreground text-base font-bold text-background shadow-md"
+        <>
+          <WithdrawSpeiDestination
+            abbrClabeHint={abbrClabeHint}
+            bankAccountLabel={bankAccountLabel}
             disabled={!!busy}
-            onClick={() => void continueOfframp()}
-          >
-            {continueBusy ? (
-              <>
-                <Spinner className="size-4 text-background" />
-                Preparando retiro…
-              </>
-            ) : (
-              'Continuar con el retiro'
-            )}
-          </Button>
-        </section>
+            onSelectionChange={onDestinationSelectionChange}
+            onValidityChange={onDestinationValidity}
+          />
+
+          <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-5 dark:border-border dark:bg-card/80">
+            <div>
+              <h2 className="text-base font-bold text-foreground">¿Cuánto quieres retirar?</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Cantidad del activo en tu wallet (el cotizador convierte a pesos para el SPEI).
+              </p>
+            </div>
+            <Input
+              inputMode="decimal"
+              value={sourceAmountTokens}
+              onChange={(e) => setSourceAmountTokens(e.target.value)}
+              placeholder="Ej. 10"
+              className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
+              aria-label="Cantidad del activo a retirar"
+            />
+            <details className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-medium text-foreground">
+                Opciones avanzadas (sandbox)
+              </summary>
+              <div className="mt-3 space-y-3">
+                <div>
+                  <Label htmlFor="source-asset-offramp" className="text-[11px] text-muted-foreground">
+                    Activo fuente (opcional)
+                  </Label>
+                  <Input
+                    id="source-asset-offramp"
+                    value={sourceAssetOverride}
+                    onChange={(e) => setSourceAssetOverride(e.target.value)}
+                    placeholder="Identificador del activo"
+                    className="mt-1 h-11 rounded-xl border-border bg-background px-3 font-mono text-xs"
+                    aria-label="Identificador de activo opcional"
+                  />
+                </div>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="use-anchor"
+                    checked={useAnchor}
+                    onCheckedChange={(v) => setUseAnchor(v === true)}
+                    className="mt-0.5"
+                  />
+                  <Label
+                    htmlFor="use-anchor"
+                    className="cursor-pointer leading-relaxed font-normal"
+                  >
+                    Modo anchor en Stellar (solo pruebas).{' '}
+                    <a
+                      href="https://docs.etherfuse.com/guides/testing-offramps#anchor-mode-stellar-only"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-foreground underline underline-offset-2"
+                    >
+                      Documentación
+                    </a>
+                  </Label>
+                </div>
+              </div>
+            </details>
+            {destinationReason ? (
+              <p className="rounded-xl border border-destructive/25 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                {destinationReason}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              className="h-14 w-full rounded-2xl bg-foreground text-base font-bold text-background shadow-md"
+              disabled={!!busy || !destinationValid}
+              onClick={() => void continueOfframp()}
+            >
+              {continueBusy ? (
+                <>
+                  <Spinner className="size-4 text-background" />
+                  Preparando retiro…
+                </>
+              ) : (
+                'Continuar con el retiro'
+              )}
+            </Button>
+          </section>
+        </>
       ) : null}
 
       {canOperate || orderJson.trim() ? (

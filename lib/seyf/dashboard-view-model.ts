@@ -1,7 +1,7 @@
 import type { InvestmentRun } from "@/lib/seyf/investment-mvp";
-import { listRuns, MOCK_ANNUAL_RATE_PERCENT, getLedgerMeta } from "@/lib/seyf/investment-mvp";
+import { listRunsForUser, MOCK_ANNUAL_RATE_PERCENT, getLedgerMeta } from "@/lib/seyf/investment-mvp";
 import { fetchDashboardCetesSaldo, type DashboardCetesSaldo } from "@/lib/seyf/dashboard-cetes-saldo";
-import { getEtherfuseRampContext } from "@/lib/seyf/etherfuse-ramp-context";
+import { resolveEtherfuseRampContext } from "@/lib/seyf/etherfuse-ramp-context";
 import { fetchUserMovements } from "@/lib/seyf/user-movements";
 import {
   DASHBOARD_MOVEMENTS_PREVIEW_LIMIT,
@@ -55,14 +55,25 @@ const DASHBOARD_ETHERFUSE_ORDER_PAGES = 2;
 /**
  * Ensambla números en vivo: saldo CETES×MXN (Etherfuse) y, en dev o con SEYF_ALLOW_MOCK_INVEST, ledger MVP.
  */
-export async function buildDashboardViewModel(): Promise<DashboardViewModel> {
-  const ctx = await getEtherfuseRampContext();
+export async function buildDashboardViewModel(options?: {
+  /** Misma clave Stellar que Pollar; ayuda a resolver órdenes Etherfuse sin cookie en este dispositivo. */
+  walletPublicKeyHint?: string | null;
+}): Promise<DashboardViewModel> {
+  const ctx = await resolveEtherfuseRampContext({
+    walletPublicKeyHint: options?.walletPublicKeyHint ?? null,
+  });
+  const ledgerUserKey = ctx?.publicKey ?? options?.walletPublicKeyHint ?? null;
   const [cetesSaldo, investRuns, movementsAll] = await Promise.all([
     fetchDashboardCetesSaldo(ctx),
-    investAllowed() ? listRuns(20) : Promise.resolve([] as InvestmentRun[]),
+    investAllowed()
+      ? ledgerUserKey
+        ? listRunsForUser(ledgerUserKey, 20)
+        : Promise.resolve([] as InvestmentRun[])
+      : Promise.resolve([] as InvestmentRun[]),
     fetchUserMovements(ctx, {
       etherfuseMaxPages: DASHBOARD_ETHERFUSE_ORDER_PAGES,
       ledgerRunsLimit: 20,
+      walletPublicKey: ledgerUserKey,
     }),
   ]);
 
@@ -93,6 +104,9 @@ export async function buildDashboardViewModel(): Promise<DashboardViewModel> {
     saldoNote =
       "Saldo según tus depósitos de prueba. Identidad te da el valor en vivo en pesos.";
   }
+  if (cetesSaldo.kind === "error") {
+    saldoNote = `${saldoNote ?? ""} El carrusel usa tu saldo CETES en la wallet (Pollar); la nota en MXN vía Etherfuse falló.`.trim();
+  }
 
   const movementsRecent = movementsAll.slice(0, DASHBOARD_MOVEMENTS_PREVIEW_LIMIT);
 
@@ -117,7 +131,9 @@ export async function buildDashboardViewModel(): Promise<DashboardViewModel> {
  * Builds the new dashboard API response according to M07-T01 requirements.
  * Returns { no_active_cycle: true } if no active cycle exists.
  */
-export async function buildDashboardApiResponse(): Promise<
+export async function buildDashboardApiResponse(options?: {
+  walletPublicKeyHint?: string | null;
+}): Promise<
   | {
       capital_working_mxn: number;
       yield_accrued_mxn: number;
@@ -129,16 +145,28 @@ export async function buildDashboardApiResponse(): Promise<
     }
   | { no_active_cycle: true }
 > {
-  // Check if there's an active cycle
+  const ctx = await resolveEtherfuseRampContext({
+    walletPublicKeyHint: options?.walletPublicKeyHint ?? null,
+  });
+  const ledgerKey = ctx?.publicKey ?? options?.walletPublicKeyHint ?? null;
+
   const ledgerMeta = await getLedgerMeta();
-  const hasActiveCycle = ledgerMeta.activeCycleId && ledgerMeta.totalRuns > 0;
-  
-  if (!hasActiveCycle) {
+
+  if (!ledgerMeta.activeCycleId) {
     return { no_active_cycle: true };
   }
 
-  // Get investment runs to calculate principal
-  const investRuns = investAllowed() ? await listRuns(20) : [];
+  if (!ledgerKey) {
+    return { no_active_cycle: true };
+  }
+
+  const investRuns = investAllowed()
+    ? await listRunsForUser(ledgerKey, 20)
+    : [];
+  if (investRuns.length === 0) {
+    return { no_active_cycle: true };
+  }
+
   const principalMxn = ledgerPrincipalMxn(investRuns);
   
   if (principalMxn <= 0) {

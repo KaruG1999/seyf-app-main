@@ -5,13 +5,18 @@ import { buildDashboardViewModel, buildDashboardApiResponse } from '@/lib/seyf/d
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const wallet = new URL(request.url).searchParams.get("wallet")?.trim() ?? ""
     // For backward compatibility with frontend, we still need the full view model
-    const vm = await buildDashboardViewModel()
+    const vm = await buildDashboardViewModel({
+      walletPublicKeyHint: wallet.length > 0 ? wallet : null,
+    })
     
     // Get the new API response format
-    const apiResponse = await buildDashboardApiResponse()
+    const apiResponse = await buildDashboardApiResponse({
+      walletPublicKeyHint: wallet.length > 0 ? wallet : null,
+    })
     
     // If no active cycle, keep API compatibility by returning both:
     // - the new shape signal (`no_active_cycle`)

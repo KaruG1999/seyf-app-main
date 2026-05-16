@@ -100,7 +100,10 @@ export default function HistorialPageClient() {
     }
 
     try {
-      const umR = await fetch(pollBustUrl('/api/seyf/user-movements'), POLL_FETCH_INIT)
+      const umR = await fetch(
+        pollBustUrl(`/api/seyf/user-movements?wallet=${encodeURIComponent(addr)}`),
+        POLL_FETCH_INIT,
+      )
       if (umR.ok) {
         const j = (await umR.json()) as { movements?: UserMovement[] }
         if (Array.isArray(j.movements)) fromApi = j.movements
@@ -133,7 +136,10 @@ export default function HistorialPageClient() {
       const addr = wallet.stellarAddress.trim()
       const [stellarR, umR] = await Promise.all([
         fetch(`/api/seyf/stellar-movements?account=${encodeURIComponent(addr)}`),
-        fetch(pollBustUrl('/api/seyf/user-movements'), POLL_FETCH_INIT),
+        fetch(
+          pollBustUrl(`/api/seyf/user-movements?wallet=${encodeURIComponent(addr)}`),
+          POLL_FETCH_INIT,
+        ),
       ])
       let stellar: UserMovement[] = []
       if (stellarR.ok) {

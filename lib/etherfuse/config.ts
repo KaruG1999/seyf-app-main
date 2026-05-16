@@ -114,15 +114,9 @@ export function getEtherfuseConfig(): EtherfuseConfig {
     baseUrl = defaultBaseUrl;
   }
 
-  // --- ETHERFUSE_WEBHOOK_SECRET: required in production ---
+  // --- ETHERFUSE_WEBHOOK_SECRET: optional here; webhook route enforces it when needed ---
   const webhookSecretRaw = process.env.ETHERFUSE_WEBHOOK_SECRET?.trim() ?? "";
   const webhookSecret: string | null = webhookSecretRaw || null;
-
-  if (strictProd && !webhookSecretRaw) {
-    errors.push(
-      "ETHERFUSE_WEBHOOK_SECRET: required in production. See .env.example.",
-    );
-  }
 
   // --- SEYF_ALLOW_ETHERFUSE_RAMP: must be "true" in production ---
   const allowRampRaw = process.env.SEYF_ALLOW_ETHERFUSE_RAMP?.trim();

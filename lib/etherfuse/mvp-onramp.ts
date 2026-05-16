@@ -1,8 +1,8 @@
 import {
-  createMxOnrampOrder,
   createMxOnrampQuote,
   fetchRampableAssetsForWallet,
   pickOnrampTargetIdentifier,
+  createMxOnrampOrderStellarResilient,
 } from "./ramp-api";
 import {
   type MvpPartnerRampIdentity,
@@ -12,17 +12,11 @@ import {
 import {
   cancelOrder,
   fetchOrderDetails,
-  fetchOrdersFirstPage,
+  fetchOrgOrdersAllPages,
   findPendingOnrampOrderForAmount,
 } from "./orders-api";
-
-function quoteIdFromPayload(q: unknown): string | undefined {
-  if (!q || typeof q !== "object") return undefined;
-  const o = q as Record<string, unknown>;
-  if (typeof o.quoteId === "string") return o.quoteId;
-  if (typeof o.quote_id === "string") return o.quote_id;
-  return undefined;
-}
+import { AppError } from "@/lib/seyf/api-error";
+import { quoteIdFromEtherfusePayload } from "@/lib/etherfuse/quote-id";
 
 function depositFromCreateOrderResponse(data: unknown): {
   orderId: string;
@@ -133,7 +127,7 @@ export async function executeMvpPartnerOnramp(params: {
   }
 
   if (params.forceNew) {
-    const orders = await fetchOrdersFirstPage();
+    const orders = await fetchOrgOrdersAllPages();
     const pendingId = findPendingOnrampOrderForAmount(
       orders,
       identity.bankAccountId,
@@ -149,27 +143,31 @@ export async function executeMvpPartnerOnramp(params: {
     sourceAmount: params.sourceAmount,
     targetAssetIdentifier: targetAsset,
   });
-  const quoteId = quoteIdFromPayload(quote);
+  const quoteId = quoteIdFromEtherfusePayload(quote);
   if (!quoteId) {
     throw new Error("Cotización sin quoteId");
   }
 
-  let cryptoWalletId: string | undefined;
+  let cryptoWalletId: string;
   try {
     cryptoWalletId = await resolveMvpPartnerCryptoWalletId(identity.publicKey);
-  } catch {
-    cryptoWalletId = undefined;
+  } catch (e) {
+    const detail = e instanceof Error ? e.message : String(e);
+    throw new AppError("validation_error", {
+      retryable: false,
+      message: detail,
+      messageEs:
+        "Tu wallet Stellar no aparece en Etherfuse para esta API key. Completa /identidad (KYC y registro de wallet) o revisa el panel de Etherfuse.",
+    });
   }
 
   let orderJson: unknown;
   try {
-    orderJson = await createMxOnrampOrder({
+    orderJson = await createMxOnrampOrderStellarResilient({
       bankAccountId: identity.bankAccountId,
       quoteId,
       publicKey: identity.publicKey,
-      ...(process.env.SEYF_PREFER_CRYPTO_WALLET_ID === "true" && cryptoWalletId
-        ? { cryptoWalletId }
-        : {}),
+      cryptoWalletId,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "";
@@ -178,7 +176,7 @@ export async function executeMvpPartnerOnramp(params: {
       msg.includes("(409)") ||
       lm.includes("pending onramp order already exists")
     ) {
-      const orders = await fetchOrdersFirstPage();
+      const orders = await fetchOrgOrdersAllPages();
       const pendingId = findPendingOnrampOrderForAmount(
         orders,
         identity.bankAccountId,

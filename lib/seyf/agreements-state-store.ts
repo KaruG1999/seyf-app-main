@@ -1,78 +1,53 @@
-import { mkdir, readFile, writeFile } from "fs/promises";
-import path from "path";
+import { Redis } from '@upstash/redis'
 
 type AgreementsRow = {
-  customerId: string;
-  walletPublicKey: string;
-  accepted: boolean;
-  acceptedAt: string | null;
-  updatedAt: string;
-};
-
-type AgreementsStore = {
-  rows: AgreementsRow[];
-};
-
-function agreementsStorePath() {
-  return path.join(process.cwd(), "data", "seyf-agreements-state.json");
+  customerId: string
+  walletPublicKey: string
+  accepted: boolean
+  acceptedAt: string | null
+  updatedAt: string
 }
 
-async function loadStore(): Promise<AgreementsStore> {
-  try {
-    const raw = await readFile(agreementsStorePath(), "utf-8");
-    const parsed = JSON.parse(raw) as AgreementsStore;
-    if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.rows)) {
-      return { rows: [] };
-    }
-    return parsed;
-  } catch {
-    return { rows: [] };
-  }
+function getRedis(): Redis {
+  return Redis.fromEnv()
 }
 
-async function saveStore(store: AgreementsStore): Promise<void> {
-  await mkdir(path.dirname(agreementsStorePath()), { recursive: true });
-  await writeFile(agreementsStorePath(), JSON.stringify(store, null, 2), "utf-8");
+function agreementsKey(customerId: string, walletPublicKey: string): string {
+  return `seyf:agreements:${customerId}:${walletPublicKey}`
 }
 
 export async function getStoredAgreementsStatus(
   customerId: string,
   walletPublicKey: string,
 ): Promise<{ accepted: boolean; acceptedAt: string | null } | null> {
-  const store = await loadStore();
-  const found = store.rows.find(
-    (row) => row.customerId === customerId && row.walletPublicKey === walletPublicKey,
-  );
-  if (!found) return null;
-  return { accepted: found.accepted, acceptedAt: found.acceptedAt };
+  try {
+    const redis = getRedis()
+    const row = await redis.get<AgreementsRow>(agreementsKey(customerId, walletPublicKey))
+    if (!row) return null
+    return { accepted: row.accepted, acceptedAt: row.acceptedAt }
+  } catch {
+    return null
+  }
 }
 
 export async function upsertStoredAgreementsAccepted(params: {
-  customerId: string;
-  walletPublicKey: string;
-  acceptedAt?: string | null;
+  customerId: string
+  walletPublicKey: string
+  acceptedAt?: string | null
 }): Promise<void> {
-  const store = await loadStore();
-  const idx = store.rows.findIndex(
-    (row) => row.customerId === params.customerId && row.walletPublicKey === params.walletPublicKey,
-  );
-  const now = new Date().toISOString();
-  const acceptedAt = params.acceptedAt ?? now;
-  if (idx >= 0) {
-    store.rows[idx] = {
-      ...store.rows[idx],
-      accepted: true,
-      acceptedAt,
-      updatedAt: now,
-    };
-  } else {
-    store.rows.unshift({
-      customerId: params.customerId,
-      walletPublicKey: params.walletPublicKey,
-      accepted: true,
-      acceptedAt,
-      updatedAt: now,
-    });
+  const redis = getRedis()
+  const key = agreementsKey(params.customerId, params.walletPublicKey)
+  const existing = await redis.get<AgreementsRow>(key)
+  const now = new Date().toISOString()
+  const acceptedAt = params.acceptedAt ?? now
+  const row: AgreementsRow = {
+    ...(existing ?? {}),
+    customerId: params.customerId,
+    walletPublicKey: params.walletPublicKey,
+    accepted: true,
+    acceptedAt,
+    updatedAt: now,
   }
-  await saveStore(store);
+  // TTL 365 días
+  await redis.set(key, row, { ex: 60 * 60 * 24 * 365 })
 }
