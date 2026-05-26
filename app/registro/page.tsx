@@ -3,10 +3,12 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
 export default function RegistroPage() {
+  const t = useTranslations('auth.registro')
   const router = useRouter()
   const [form, setForm] = useState({ nombre: '', correo: '', telefono: '', password: '' })
   const [accepted, setAccepted] = useState(false)
@@ -30,23 +32,23 @@ export default function RegistroPage() {
     <div className="flex min-h-screen flex-col bg-background px-6 py-12">
       {/* Header */}
       <div className="mb-10">
-        <Link href="/" className="text-2xl font-black tracking-tight text-foreground">Seyf</Link>
+        <Link href="/" className="text-2xl font-black tracking-tight text-foreground">{t('title')}</Link>
       </div>
 
       <div className="flex flex-1 flex-col justify-center">
         <div className="mb-8">
           <h2 className="text-4xl font-black tracking-tight text-foreground leading-none">
-            Crea tu<br />cuenta.
+            {t('heading')}<br />{t('headingLine2')}
           </h2>
           <p className="mt-4 text-base text-muted-foreground font-normal">
-            Solo toma 2 minutos. Sin complicaciones.
+            {t('subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="text"
-            placeholder="Nombre completo"
+            placeholder={t('namePlaceholder')}
             value={form.nombre}
             onChange={handleChange('nombre')}
             required
@@ -54,7 +56,7 @@ export default function RegistroPage() {
           />
           <Input
             type="email"
-            placeholder="Correo electronico"
+            placeholder={t('emailPlaceholder')}
             value={form.correo}
             onChange={handleChange('correo')}
             required
@@ -62,7 +64,7 @@ export default function RegistroPage() {
           />
           <Input
             type="tel"
-            placeholder="Telefono (10 digitos)"
+            placeholder={t('phonePlaceholder')}
             value={form.telefono}
             onChange={handleChange('telefono')}
             required
@@ -71,7 +73,7 @@ export default function RegistroPage() {
           />
           <Input
             type="password"
-            placeholder="Contrasena"
+            placeholder={t('passwordPlaceholder')}
             value={form.password}
             onChange={handleChange('password')}
             required
@@ -85,10 +87,10 @@ export default function RegistroPage() {
               className={`mt-0.5 h-5 w-5 shrink-0 rounded-full border transition-colors cursor-pointer ${accepted ? 'bg-foreground border-foreground' : 'border-muted-foreground'}`}
             />
             <span className="text-sm text-muted-foreground leading-relaxed">
-              Acepto los{' '}
-              <Link href="#" className="text-foreground underline underline-offset-4">Terminos y Condiciones</Link>{' '}
-              y el{' '}
-              <Link href="#" className="text-foreground underline underline-offset-4">Aviso de Privacidad</Link>
+              {t('termsPrefix')}{' '}
+              <Link href="#" className="text-foreground underline underline-offset-4">{t('termsLink')}</Link>{' '}
+              {t('termsMiddle')}{' '}
+              <Link href="#" className="text-foreground underline underline-offset-4">{t('privacyLink')}</Link>
             </span>
           </label>
 
@@ -99,16 +101,16 @@ export default function RegistroPage() {
               disabled={loading || !accepted}
               className="w-full h-14 rounded-full bg-foreground text-background font-bold text-base hover:bg-foreground/90 transition-all disabled:opacity-40"
             >
-              {loading ? 'Creando cuenta...' : 'Continuar'}
+              {loading ? t('submitLoading') : t('submit')}
             </Button>
           </div>
         </form>
       </div>
 
       <p className="mt-8 text-center text-sm text-muted-foreground">
-        Ya tienes cuenta?{' '}
+        {t('hasAccount')}{' '}
         <Link href="/login" className="font-bold text-foreground hover:underline">
-          Iniciar sesion
+          {t('loginLink')}
         </Link>
       </p>
     </div>

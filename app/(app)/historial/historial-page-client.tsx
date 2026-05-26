@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { AppPageBody } from '@/components/app/app-page-body'
@@ -16,9 +17,6 @@ import { POLL_FETCH_INIT, pollBustUrl } from '@/lib/seyf/poll-fetch'
 import type { UserMovement } from '@/lib/seyf/user-movements-types'
 import { formatMovementListSubtitle } from '@/lib/seyf/user-movements-types'
 import { cn } from '@/lib/utils'
-
-const filtros = ['Todas', 'Entradas', 'Salidas'] as const
-type Filtro = (typeof filtros)[number]
 
 /** Sin ledger MVP / “Ahorro invertido (prueba)”. */
 function isRealMovement(m: UserMovement): boolean {
@@ -35,13 +33,6 @@ function mergeMovements(etherfuseYmas: UserMovement[], stellar: UserMovement[]):
   return [...map.values()].sort(
     (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
   )
-}
-
-function matchesFiltro(m: UserMovement, f: Filtro): boolean {
-  if (f === 'Todas') return true
-  if (f === 'Entradas') return m.monto >= 0
-  if (f === 'Salidas') return m.monto < 0
-  return true
 }
 
 function formatHistorialMonto(mov: UserMovement): string {
@@ -62,11 +53,25 @@ function formatHistorialMonto(mov: UserMovement): string {
 }
 
 export default function HistorialPageClient() {
+  const t = useTranslations('historial')
+  const filtros = [t('filters.todas'), t('filters.entradas'), t('filters.salidas')] as const
+  type Filtro = (typeof filtros)[number]
+
+  const matchesFiltro = useCallback(
+    (m: UserMovement, f: Filtro): boolean => {
+      if (f === t('filters.todas')) return true
+      if (f === t('filters.entradas')) return m.monto >= 0
+      if (f === t('filters.salidas')) return m.monto < 0
+      return true
+    },
+    [t],
+  )
+
   const { wallet, loading: walletLoading } = useSeyfWallet()
   const [items, setItems] = useState<UserMovement[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [filtro, setFiltro] = useState<Filtro>('Todas')
+  const [filtro, setFiltro] = useState<Filtro>(filtros[0])
   const [selected, setSelected] = useState<UserMovement | null>(null)
 
   const loadAll = useCallback(async () => {
@@ -96,7 +101,7 @@ export default function HistorialPageClient() {
         errs.push(err.error ?? `Stellar (${stellarR.status})`)
       }
     } catch {
-      errs.push('No se pudieron cargar pagos Stellar')
+      errs.push(t('errors.stellar'))
     }
 
     try {
@@ -111,7 +116,7 @@ export default function HistorialPageClient() {
         errs.push(`Órdenes (${umR.status})`)
       }
     } catch {
-      errs.push('No se pudieron cargar órdenes Etherfuse')
+      errs.push(t('errors.orders'))
     }
 
     const merged = mergeMovements(fromApi, stellar)
@@ -119,7 +124,7 @@ export default function HistorialPageClient() {
     setError(merged.length === 0 && errs.length > 0 ? errs.join(' · ') : null)
 
     setLoading(false)
-  }, [wallet?.stellarAddress])
+  }, [wallet?.stellarAddress, t])
 
   useEffect(() => {
     if (!wallet?.stellarAddress) {
@@ -180,7 +185,7 @@ export default function HistorialPageClient() {
     window.addEventListener('pageshow', onPageShow)
     return () => {
       cancelled = true
-      for (const t of extraTimers) clearTimeout(t)
+      for (const tm of extraTimers) clearTimeout(tm)
       clearInterval(id)
       document.removeEventListener('visibilitychange', onVis)
       window.removeEventListener('focus', onFocus)
@@ -197,7 +202,7 @@ export default function HistorialPageClient() {
 
   const filtered = useMemo(
     () => items.filter((m) => matchesFiltro(m, filtro)),
-    [items, filtro],
+    [items, filtro, matchesFiltro],
   )
 
   if (walletLoading && !wallet) {
@@ -225,16 +230,16 @@ export default function HistorialPageClient() {
           <div className="pointer-events-none absolute -bottom-20 -left-14 h-44 w-44 rounded-full bg-[#b8b8b5]/20 blur-3xl dark:bg-[#22433c]/40" />
           <div className="relative">
             <p className="inline-flex rounded-full border border-[#b8b8b5]/60 bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5f7168] dark:border-white/20 dark:bg-white/15 dark:text-[#d2e9df]">
-              Estado de cuenta
+              {t('hero.badge')}
             </p>
-            <h1 className="mt-2 text-3xl font-black tracking-tight text-[#41534b] dark:text-white">Historial</h1>
+            <h1 className="mt-2 text-3xl font-black tracking-tight text-[#41534b] dark:text-white">{t('hero.title')}</h1>
             <p className="mt-2 text-sm text-[#6f837a] dark:text-[#d2e9df]">
-              Conecta tu wallet para ver movimientos en cadena y por transferencia.
+              {t('hero.noWallet')}
             </p>
           </div>
         </section>
         <Button asChild className="h-11 rounded-full font-bold">
-          <Link href="/">Ir a conectar</Link>
+          <Link href="/">{t('hero.connectBtn')}</Link>
         </Button>
       </AppPageBody>
     )
@@ -248,11 +253,11 @@ export default function HistorialPageClient() {
         <div className="pointer-events-none absolute -bottom-20 -left-14 h-44 w-44 rounded-full bg-[#b8b8b5]/20 blur-3xl dark:bg-[#22433c]/40" />
         <div className="relative">
           <p className="inline-flex rounded-full border border-[#b8b8b5]/60 bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5f7168] dark:border-white/20 dark:bg-white/15 dark:text-[#d2e9df]">
-            Estado de cuenta
+            {t('hero.badge')}
           </p>
-          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#41534b] dark:text-white">Historial</h1>
+          <h1 className="mt-2 text-3xl font-black tracking-tight text-[#41534b] dark:text-white">{t('hero.title')}</h1>
           <p className="mt-2 text-sm text-[#6f837a] dark:text-[#d2e9df]">
-            Pagos en cadena y movimientos por transferencia en un solo lugar.
+            {t('hero.subtitle')}
           </p>
         </div>
       </section>
@@ -285,7 +290,7 @@ export default function HistorialPageClient() {
             className="mt-2 rounded-full"
             onClick={() => void loadAll()}
           >
-            Reintentar
+            {t('retry')}
           </Button>
         </div>
       ) : null}
@@ -301,9 +306,9 @@ export default function HistorialPageClient() {
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-[1.5rem] border border-border bg-card py-20 text-center">
-          <p className="mb-2 text-lg font-black text-foreground">Sin movimientos</p>
+          <p className="mb-2 text-lg font-black text-foreground">{t('empty.title')}</p>
           <p className="max-w-sm text-sm text-muted-foreground">
-            No hay operaciones que coincidan, o aún no hay actividad en Stellar / Etherfuse con esta cuenta.
+            {t('empty.body')}
           </p>
         </div>
       ) : (

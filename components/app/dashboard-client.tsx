@@ -27,6 +27,7 @@ import { formatMXN, formatLoUltimoMonto } from '@/lib/formatters'
 import { cn } from '@/lib/utils'
 import type { EtherfuseKycSnapshot } from '@/lib/etherfuse/kyc'
 import { isPublicStellarTestnet } from '@/lib/seyf/stellar-wallet-network'
+import { useTranslations } from 'next-intl'
 
 function formatMontoOculto() {
   return '••••'
@@ -91,6 +92,7 @@ export default function DashboardClient({
 }: {
   vm: DashboardViewModel
 }) {
+  const t = useTranslations('dashboard')
   const { wallet, assetBalances, loading, refreshBalance } = useSeyfWallet()
   const [selected, setSelected] = useState<UserMovement | null>(null)
   const [hideBalances, setHideBalances] = useState(false)
@@ -170,30 +172,22 @@ export default function DashboardClient({
   const kycBadge =
     kycStatus?.status === 'approved' || kycStatus?.status === 'approved_chain_deploying'
       ? {
-          label: 'Identidad verificada',
+          label: t('kycApproved'),
           tone: 'ok' as const,
-          href: '/identidad',
-          action: 'Ver estado',
         }
       : kycStatus?.status === 'proposed'
         ? {
-            label: 'Pendiente de verificación',
+            label: t('kycPending'),
             tone: 'wait' as const,
-            href: '/identidad',
-            action: 'Actualizar estado',
           }
         : kycStatus?.status === 'rejected'
           ? {
-              label: 'Verificación fallida',
+              label: t('kycRejected'),
               tone: 'bad' as const,
-              href: '/identidad',
-              action: 'Corregir datos',
             }
           : {
-              label: 'Verificación pendiente',
+              label: t('kycUnverified'),
               tone: 'muted' as const,
-              href: '/identidad',
-              action: 'Verificar ahora',
             }
 
   const lastBonusWalletKeyRef = useRef<string>('')
@@ -435,12 +429,12 @@ export default function DashboardClient({
     return (
       <AppPageBody className="space-y-4 pt-4">
         <div className="rounded-[1.5rem] border border-border bg-card px-5 py-8 text-center">
-          <p className="text-sm font-bold text-foreground">Conecta tu wallet</p>
+          <p className="text-sm font-bold text-foreground">{t('connectWallet')}</p>
           <p className="mt-2 text-xs text-muted-foreground">
-            Para ver tu saldo y movimientos, inicia sesión en tu cuenta.
+            {t('connectWalletBody')}
           </p>
           <Button asChild className="mt-6 h-11 w-full max-w-xs rounded-full font-bold">
-            <Link href="/">Ir a conectar</Link>
+            <Link href="/">{t('connectAction')}</Link>
           </Button>
         </div>
       </AppPageBody>
@@ -451,9 +445,9 @@ export default function DashboardClient({
     <AppPageBody className="space-y-6 pt-4">
       <section className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
         <div className="min-w-0">
-          <p className="truncate text-sm font-bold text-foreground">Cuenta principal</p>
+          <p className="truncate text-sm font-bold text-foreground">{t('mainAccount')}</p>
           <p className="text-[11px] text-muted-foreground">
-            Última actualización{' '}
+            {t('lastUpdate')}{' '}
             {lastUpdateAt.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}
           </p>
           <p
@@ -483,14 +477,14 @@ export default function DashboardClient({
           }}
         >
           {hideBalances ? <Eye className="mr-1.5 size-4" /> : <EyeOff className="mr-1.5 size-4" />}
-          {hideBalances ? 'Mostrar saldos' : 'Ocultar saldos'}
+          {hideBalances ? t('showBalances') : t('hideBalances')}
         </Button>
       </section>
 
       {error && (
         <section className="flex items-center justify-between rounded-2xl border border-amber-500/30 bg-amber-500/[0.08] px-4 py-3">
           <p className="text-xs font-medium text-amber-200">
-            No pudimos cargar tu información. Intenta de nuevo.
+            {t('loadError')}
           </p>
           <Button
             type="button"
@@ -498,7 +492,7 @@ export default function DashboardClient({
             className="ml-3 h-8 shrink-0 rounded-full border-amber-500/30 bg-transparent px-3 text-xs font-semibold text-amber-300 hover:bg-amber-500/10"
             onClick={() => void mutate()}
           >
-            Reintentar
+            {t('retry')}
           </Button>
         </section>
       )}
@@ -524,7 +518,7 @@ export default function DashboardClient({
         {hideBalances ? (
           <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-[1.75rem] bg-background/35 backdrop-blur-[2px]">
             <span className="rounded-full border border-border bg-card/90 px-3 py-1 text-xs font-bold text-foreground">
-              Saldos ocultos
+              {t('balancesHidden')}
             </span>
           </div>
         ) : null}
@@ -542,14 +536,14 @@ export default function DashboardClient({
           <div className="relative flex items-stretch gap-3">
             <div className="min-w-0 flex-1">
               <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#d8efe5]">
-                Testnet
+                {t('bonus.badge')}
               </p>
               <p className="mt-3 text-xl font-black leading-tight tracking-tight text-white">
-                Bono bienvenida
-                <br />300 MXN a CETES
+                {t('bonus.title')}
+                <br />{t('bonus.titleLine2')}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-[#d2e9df]">
-                Creamos una orden onramp de prueba y simulamos el depósito para fondear tu wallet y probar la app.
+                {t('bonus.body')}
               </p>
               <div className="mt-4">
                 <Button
@@ -559,10 +553,10 @@ export default function DashboardClient({
                   className="h-10 rounded-full bg-white px-4 text-sm font-bold text-[#184e46] hover:bg-white/90 disabled:bg-white/70"
                 >
                   {welcomeBonusBusy
-                    ? 'Activando...'
+                    ? t('bonus.activating')
                     : welcomeBonusClaimed
-                      ? 'Bono activado'
-                      : 'Activar bono'}
+                      ? t('bonus.activated')
+                      : t('bonus.activate')}
                 </Button>
               </div>
               {welcomeBonusMessage ? (
@@ -594,14 +588,14 @@ export default function DashboardClient({
             <X className="size-4" />
           </button>
           <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#d8efe5]">
-            Refiere y gana
+            {t('referral.badge')}
           </p>
           <p className="mt-3 text-xl font-black leading-tight tracking-tight">
-            Refiere a un amigo y recibe
-            <br />200 CETES al instante
+            {t('referral.title')}
+            <br />{t('referral.titleLine2')}
           </p>
           <p className="mt-2 text-xs leading-relaxed text-[#d2e9df]">
-            Comparte tu invitación por WhatsApp. Cuando entre con tu enlace, activas recompensa.
+            {t('referral.body')}
           </p>
           <div className="mt-4">
             <Button
@@ -609,7 +603,7 @@ export default function DashboardClient({
               className="h-10 rounded-full bg-white px-4 text-sm font-bold text-[#184e46] hover:bg-white/90"
             >
               <a href={whatsappInviteHref} target="_blank" rel="noreferrer">
-                Compartir por WhatsApp
+                {t('referral.cta')}
               </a>
             </Button>
           </div>
@@ -618,16 +612,15 @@ export default function DashboardClient({
 
       <section className="overflow-hidden rounded-[1.5rem] border border-border bg-card">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-bold text-foreground">Lo último</h2>
+          <h2 className="text-sm font-bold text-foreground">{t('loUltimo')}</h2>
           <p className="mt-0.5 text-[11px] text-muted-foreground">
-            Últimos {DASHBOARD_MOVEMENTS_PREVIEW_LIMIT} movimientos de tu cuenta · toca para ver
-            detalle
+            {t('loUltimoSubtitle', { count: DASHBOARD_MOVEMENTS_PREVIEW_LIMIT })}
           </p>
         </div>
         <ul className="divide-y divide-border">
           {loUltimoMovements.length === 0 ? (
             <li className="px-4 py-8 text-center text-sm text-muted-foreground">
-              Aquí aparecerán depósitos, retiros, transferencias y demás movimientos.
+              {t('noMovements')}
             </li>
           ) : (
             loUltimoMovements.map((mov) => {
@@ -677,7 +670,7 @@ export default function DashboardClient({
             href="/historial"
             className="flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground"
           >
-            Ver historial
+            {t('viewHistory')}
           </Link>
         </div>
       </section>
@@ -694,9 +687,9 @@ export default function DashboardClient({
                 className="flex items-center justify-between rounded-xl py-1 transition hover:opacity-90"
               >
                 <div>
-                  <p className="text-sm font-bold text-foreground">Tu resumen de saldos en tiempo real</p>
+                  <p className="text-sm font-bold text-foreground">{t('balanceSummaryTitle')}</p>
                   <p className="text-[11px] text-muted-foreground dark:text-[#d2e9df]">
-                    Principal, rendimiento y liquidez disponible
+                    {t('balanceSummarySubtitle')}
                   </p>
                 </div>
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 ring-1 ring-[#cad9d1] dark:bg-white/15 dark:ring-white/20">
@@ -710,7 +703,7 @@ export default function DashboardClient({
                     <Wallet className="size-4 text-foreground dark:text-white" strokeWidth={2.25} />
                   </div>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground dark:text-[#cde5db]">
-                    Principal
+                    {t('principal')}
                   </p>
                   <p className="mt-1 text-base font-black tabular-nums text-foreground dark:text-white">
                     {hideBalances ? formatMontoOculto() : formatMXN(mxne)}
@@ -721,7 +714,7 @@ export default function DashboardClient({
                     <TrendingUp className="size-4 text-foreground dark:text-white" strokeWidth={2.25} />
                   </div>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground dark:text-[#cde5db]">
-                    Rendimiento
+                    {t('rendimiento')}
                   </p>
                   <p className="mt-1 text-base font-black tabular-nums text-foreground dark:text-white">
                     {hideBalances ? formatMontoOculto() : <RendimientoCounter value={data.rendimientoMxn} />}
@@ -740,11 +733,11 @@ export default function DashboardClient({
                 <div>
                   <p className="text-sm font-bold text-foreground">
                     {effectiveAdelantableMxn > 0
-                      ? 'Adelanto disponible para este ciclo'
-                      : 'Aún no tienes adelanto habilitado'}
+                      ? t('adelantoAvailable')
+                      : t('adelantoNotEnabled')}
                   </p>
                   <p className="text-[11px] text-muted-foreground dark:text-[#d2e9df]">
-                    Liquidez inmediata sin tocar tu capital principal
+                    {t('adelantoSubtitle')}
                   </p>
                 </div>
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 ring-1 ring-[#cad9d1] dark:bg-white/15 dark:ring-white/20">
@@ -755,15 +748,15 @@ export default function DashboardClient({
               <div className="relative overflow-hidden rounded-2xl border border-[#c0d6ca] bg-gradient-to-br from-[#dcebe4] via-[#d3e5dc] to-[#c8ddd3] p-4 ring-1 ring-[#b9d1c4]/70 dark:border-[#2b4a43] dark:from-[#10413a] dark:via-[#15534a] dark:to-[#1b6155] dark:ring-[#2b4a43]/80">
                 <div className="pointer-events-none absolute -right-10 -top-12 h-28 w-28 rounded-full bg-[#8ab9a3]/25 blur-2xl dark:bg-[#4d8c77]/30" />
                 <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#4d6a5f] dark:text-[#d2e9df]">
-                  Monto adelantable
+                  {t('adelantableLabel')}
                 </p>
                 <p className="mt-1 text-3xl font-black tracking-tight text-foreground dark:text-white">
                   {hideBalances ? formatMontoOculto() : formatMXN(effectiveAdelantableMxn)}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground dark:text-[#d2e9df]">
                   {effectiveAdelantableMxn > 0
-                    ? 'Disponible para solicitar ahora.'
-                    : 'Completa verificación y ciclo activo para habilitarlo.'}
+                    ? t('adelantableAvailable')
+                    : t('adelantableBlocked')}
                 </p>
               </div>
 
@@ -773,7 +766,7 @@ export default function DashboardClient({
                     <TrendingUp className="size-4 text-[#46665a] dark:text-[#d2e9df]" strokeWidth={2.25} />
                   </div>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground dark:text-[#d9e7e1]">
-                    Rendimiento
+                    {t('rendimiento')}
                   </p>
                   <p className="mt-1 text-base font-black tabular-nums text-foreground dark:text-white">
                     {hideBalances ? formatMontoOculto() : <RendimientoCounter value={data.rendimientoMxn} />}
@@ -784,10 +777,10 @@ export default function DashboardClient({
                     <Zap className="size-4 text-[#46665a] dark:text-[#d2e9df]" strokeWidth={2.25} />
                   </div>
                   <p className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground dark:text-[#d9e7e1]">
-                    Estado
+                    {t('adelantoStatus')}
                   </p>
                   <p className="mt-1 text-sm font-black text-foreground dark:text-white">
-                    {effectiveAdelantableMxn > 0 ? 'Listo para pedir' : 'Bloqueado'}
+                    {effectiveAdelantableMxn > 0 ? t('adelantoReady') : t('adelantoBlocked')}
                   </p>
                 </div>
               </div>

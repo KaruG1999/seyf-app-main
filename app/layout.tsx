@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Inter, Geist_Mono } from 'next/font/google'
 import { Analytics } from '@vercel/analytics/next'
+import { NextIntlClientProvider } from 'next-intl'
+import { getMessages } from 'next-intl/server'
 import { ThemeProvider } from '@/components/theme-provider'
 import { PublicMobileHistorySeed } from '@/components/app/public-mobile-history-seed'
 import PollarProviderClient from '@/components/providers/pollar-provider-client'
@@ -71,18 +73,21 @@ export const metadata: Metadata = {
   ],
 }
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  const messages = await getMessages()
   return (
     <html lang="es-MX" suppressHydrationWarning className={inter.variable}>
       <body className="min-h-dvh font-sans antialiased">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <PublicMobileHistorySeed />
-          <PollarProviderClient>{children}</PollarProviderClient>
-        </ThemeProvider>
+        <NextIntlClientProvider messages={messages}>
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+            <PublicMobileHistorySeed />
+            <PollarProviderClient>{children}</PollarProviderClient>
+          </ThemeProvider>
+        </NextIntlClientProvider>
         <Analytics />
       </body>
     </html>
