@@ -18,6 +18,7 @@ import { useSeyfWallet } from "@/lib/seyf/use-seyf-wallet";
 import { AppPageBody } from "@/components/app/app-page-body";
 import { DashboardHeroCarousel } from "@/components/app/dashboard-hero-carousel";
 import { MovementDetailSheet } from "@/components/app/movement-detail-sheet";
+import { YieldTrendChart } from "@/components/app/yield-trend-chart";
 import { iconForMovimientoTipo } from "@/components/app/movement-tipo-icons";
 import { Button } from "@/components/ui/button";
 import { balanceForAssetCode } from "@/lib/seyf/accesly-balances";
@@ -632,6 +633,73 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
           {data.saldoNote}
         </p>
       ) : null}
+
+      {/* Yield trend chart (daily series from dashboard API -> yield_series) */}
+      <div className="pt-4 px-1">
+        {/* If the backend provides `yield_series`, use it. Otherwise derive a daily series
+            client-side from: accrued = principal × (tasaAnual/100/365) × days_elapsed
+            We compute days_elapsed = rendimientoMxn / (principal × dailyRate)
+            and build points from day 0..days_elapsed. This mirrors server-side logic
+            and is safe (no PII, read-only). */}
+        {(() => {
+          const backendSeries = (data as any).yield_series as
+            | { date: string; accrued_mxn: number }[]
+            | undefined;
+
+          if (backendSeries && Array.isArray(backendSeries)) {
+            return (
+              <YieldTrendChart
+                data={backendSeries.map((p) => ({
+                  date: p.date,
+                  accrued_mxn: p.accrued_mxn,
+                }))}
+                isLoading={false}
+                error={null}
+                principal={data.principalMxn}
+              />
+            );
+          }
+
+          // Fallback derivation
+          const principal = data.principalMxn ?? 0;
+          const tasa = data.tasaAnual ?? 0;
+          const rendimiento = data.rendimientoMxn ?? 0;
+          const dailyRate = tasa / 100 / 365;
+
+          let daysElapsed = 0;
+          if (principal > 0 && dailyRate > 0) {
+            daysElapsed = Math.floor(rendimiento / (principal * dailyRate));
+            if (!Number.isFinite(daysElapsed) || daysElapsed < 0)
+              daysElapsed = 0;
+          }
+
+          const DEFAULT_CYCLE_DAYS = 28;
+          const effectiveDays = Math.min(daysElapsed, DEFAULT_CYCLE_DAYS);
+
+          const series: { date: string; accrued_mxn: number }[] = [];
+          const start = new Date();
+          // Assume cycle started `effectiveDays` ago
+          start.setDate(start.getDate() - effectiveDays);
+          for (let i = 0; i <= effectiveDays; i++) {
+            const d = new Date(start);
+            d.setDate(d.getDate() + i);
+            const accrued = Math.round(principal * dailyRate * i * 100) / 100;
+            series.push({
+              date: d.toISOString().split("T")[0],
+              accrued_mxn: accrued,
+            });
+          }
+
+          return (
+            <YieldTrendChart
+              data={series}
+              isLoading={false}
+              error={null}
+              principal={principal}
+            />
+          );
+        })()}
+      </div>
 
       {!activeCycle && !welcomeBonusClaimed && (
         <section className="relative overflow-hidden rounded-[1.65rem] border border-[#c6d9d0] bg-gradient-to-br from-[#0d3531] via-[#15534a] to-[#1f6559] p-5">
