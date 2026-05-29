@@ -12,9 +12,9 @@
   "categories": ["finance"],
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "/SEYF.png",
       "sizes": "any",
-      "type": "image/svg+xml",
+      "type": "image/png",
       "purpose": "any"
     },
     {

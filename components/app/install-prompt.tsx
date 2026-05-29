@@ -53,7 +53,7 @@ export function InstallPrompt() {
       className="fixed bottom-20 left-4 right-4 z-50 flex items-center gap-3 rounded-2xl border border-white/10 bg-[#15534a] px-4 py-3 shadow-xl sm:left-auto sm:right-6 sm:max-w-sm"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/icon.svg" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
+      <img src="/SEYF.png" alt="" className="h-10 w-10 shrink-0 rounded-xl" />
 
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-white">Instalar Seyf</p>
