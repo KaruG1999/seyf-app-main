@@ -8,6 +8,7 @@ import { AppPageBody } from '@/components/app/app-page-body'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 
 function formatMXN(amount: number) {
   return new Intl.NumberFormat('es-MX', {
@@ -165,8 +166,29 @@ export default function AdelantoPage() {
 
   if (initialLoading) {
     return (
-      <AppPageBody className="flex items-center justify-center pt-20">
-        <p className="text-muted-foreground animate-pulse font-medium">Generando simulación...</p>
+      <AppPageBody className="space-y-6 pt-2">
+        <Skeleton className="h-5 w-24 rounded-full" />
+        <Skeleton className="h-40 rounded-[1.5rem]" />
+        <div className="rounded-[1.5rem] border border-border bg-card p-6 shadow-[0_8px_28px_rgba(0,0,0,0.14)]">
+          <div className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-14 rounded-xl" />
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Skeleton className="h-14 rounded-xl" />
+              <Skeleton className="h-14 rounded-xl" />
+            </div>
+            <Skeleton className="h-[5.75rem] rounded-xl" />
+            <Skeleton className="h-12 w-1/2" />
+            <div className="space-y-3 border-t border-border pt-4">
+              <Skeleton className="h-5 rounded-md" />
+              <Skeleton className="h-5 rounded-md" />
+              <Skeleton className="h-5 rounded-md" />
+            </div>
+          </div>
+        </div>
+        <Skeleton className="h-12 rounded-full" />
       </AppPageBody>
     )
   }

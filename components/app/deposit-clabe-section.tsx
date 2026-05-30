@@ -5,6 +5,7 @@ import { Copy, CheckCheck, RefreshCw, ShieldCheck, Clock, AlertCircle } from 'lu
 import { Button } from '@/components/ui/button'
 import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { cn } from '@/lib/utils'
+import { Skeleton } from '@/components/ui/skeleton'
 
 type DepositInfo = {
   ok: boolean
@@ -98,7 +99,24 @@ export default function DepositClabeSection() {
     setTimeout(() => setCopied(false), 2000)
   }
 
-  if (loading && !info) return null
+  if (loading && !info)
+    return (
+      <div className="mx-auto w-full max-w-lg px-3 pb-1 pt-3 sm:px-6 sm:pt-4">
+        <div className="rounded-[1.25rem] border border-border bg-card p-3 sm:p-4">
+          <div className="flex items-center gap-3">
+            <Skeleton className="size-9 h-9 w-9 rounded-full" />
+            <div className="flex-1">
+              <Skeleton className="h-4 w-48 rounded-md mb-2" />
+              <Skeleton className="h-3 w-64 rounded-md" />
+            </div>
+          </div>
+          <div className="mt-4 space-y-3">
+            <Skeleton className="h-12 rounded-xl" />
+            <Skeleton className="h-12 rounded-full" />
+          </div>
+        </div>
+      </div>
+    )
   if (!info?.hasContext) return null
 
   const kycReady = info.kycReady
