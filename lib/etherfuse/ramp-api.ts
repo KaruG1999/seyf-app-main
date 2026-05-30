@@ -285,3 +285,31 @@ export async function createMxOnrampOrder(params: {
   }
   return json;
 }
+
+/**
+ * Onramp Stellar: en sandbox a veces solo `cryptoWalletId` devuelve "Proxy account not found";
+ * reintenta enviando también `publicKey` (ambos campos en el mismo body).
+ */
+export async function createMxOnrampOrderStellarResilient(params: {
+  bankAccountId: string;
+  quoteId: string;
+  publicKey: string;
+  cryptoWalletId: string;
+}): Promise<unknown> {
+  try {
+    return await createMxOnrampOrder({
+      bankAccountId: params.bankAccountId,
+      quoteId: params.quoteId,
+      cryptoWalletId: params.cryptoWalletId,
+    });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (!msg.toLowerCase().includes("proxy")) throw e;
+    return await createMxOnrampOrder({
+      bankAccountId: params.bankAccountId,
+      quoteId: params.quoteId,
+      publicKey: params.publicKey,
+      cryptoWalletId: params.cryptoWalletId,
+    });
+  }
+}

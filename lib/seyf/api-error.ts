@@ -5,6 +5,7 @@ export type SeyfErrorCode =
   | "spei_timeout"
   | "deploy_failed"
   | "provider_unavailable"
+  | "provider_rejected"
   | "validation_error"
   | "generic_error";
 
@@ -15,6 +16,8 @@ const MESSAGE_ES: Record<SeyfErrorCode, string> = {
   deploy_failed: "Algo salió mal. Estamos en ello.",
   provider_unavailable:
     "El proveedor no está disponible en este momento. Intenta en unos minutos.",
+  provider_rejected:
+    "Etherfuse rechazó la operación. Revisa en testnet tu KYC, términos aceptados y cuenta bancaria/CLABE; luego intenta de nuevo.",
   generic_error: "Algo salió mal. Estamos en ello.",
   validation_error: "Solicitud inválida.",
 };
@@ -23,6 +26,7 @@ const DEFAULT_STATUS: Record<SeyfErrorCode, number> = {
   spei_timeout: 504,
   deploy_failed: 500,
   provider_unavailable: 502,
+  provider_rejected: 400,
   generic_error: 500,
   validation_error: 400,
 };
@@ -31,6 +35,7 @@ const DEFAULT_RETRYABLE: Record<SeyfErrorCode, boolean> = {
   spei_timeout: true,
   deploy_failed: false,
   provider_unavailable: true,
+  provider_rejected: false,
   generic_error: false,
   validation_error: false,
 };
@@ -39,21 +44,29 @@ export class AppError extends Error {
   readonly code: SeyfErrorCode;
   readonly statusCode: number;
   readonly retryable: boolean;
+  /**
+   * Si está definido, sustituye el texto fijo de `MESSAGE_ES[code]` en el JSON de error
+   * (útil para validation_error con detalle seguro para el usuario).
+   */
+  readonly messageEs: string | null;
 
   constructor(
     code: SeyfErrorCode,
     opts?: {
       statusCode?: number;
       retryable?: boolean;
-      /** Internal message for server-side logs (not sent to the client). */
+      /** Internal message for server-side logs (not always sent to the client). */
       message?: string;
+      /** Mensaje para `error.message_es` en la respuesta; si no se envía, se usa MESSAGE_ES[code]. */
+      messageEs?: string;
     },
   ) {
-    super(opts?.message ?? MESSAGE_ES[code]);
+    super(opts?.message ?? opts?.messageEs ?? MESSAGE_ES[code]);
     this.name = "AppError";
     this.code = code;
     this.statusCode = opts?.statusCode ?? DEFAULT_STATUS[code];
     this.retryable = opts?.retryable ?? DEFAULT_RETRYABLE[code];
+    this.messageEs = opts?.messageEs?.trim() ? opts.messageEs.trim() : null;
   }
 }
 
@@ -63,6 +76,8 @@ export type SeyfErrorBody = {
     message_es: string;
     retryable: boolean;
   };
+  /** Solo si `SEYF_API_DEBUG_ERRORS=true` — detalle técnico para depuración. */
+  debug_message?: string;
 };
 
 function isEtherfuseError(e: unknown): e is Error {
@@ -87,11 +102,15 @@ export function toErrorResponse(
 
   if (e instanceof AppError) {
     console.error(tag, e.code, e.message);
+    const messageEs =
+      e.messageEs ??
+      (e.code === "validation_error" ? e.message : null) ??
+      MESSAGE_ES[e.code];
     return NextResponse.json(
       {
         error: {
           code: e.code,
-          message_es: MESSAGE_ES[e.code],
+          message_es: messageEs,
           retryable: e.retryable,
         },
       },
@@ -117,16 +136,19 @@ export function toErrorResponse(
 
   const internal = toErrorMessage(e, "unknown error");
   console.error(tag, internal);
-  return NextResponse.json(
-    {
-      error: {
-        code: "generic_error",
-        message_es: MESSAGE_ES.generic_error,
-        retryable: DEFAULT_RETRYABLE.generic_error,
-      },
+  const body: SeyfErrorBody & { debug_message?: string } = {
+    error: {
+      code: "generic_error",
+      message_es: MESSAGE_ES.generic_error,
+      retryable: DEFAULT_RETRYABLE.generic_error,
     },
-    { status: DEFAULT_STATUS.generic_error },
-  );
+  };
+  if (process.env.SEYF_API_DEBUG_ERRORS === "true") {
+    body.debug_message = internal;
+  }
+  return NextResponse.json(body, {
+    status: DEFAULT_STATUS.generic_error,
+  });
 }
 
 export function toErrorMessage(e: unknown, fallback = "Error desconocido"): string {

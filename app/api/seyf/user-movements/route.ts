@@ -1,15 +1,19 @@
 import { NextResponse } from 'next/server'
 import { toErrorResponse } from '@/lib/seyf/api-error'
-import { getEtherfuseRampContext } from '@/lib/seyf/etherfuse-ramp-context'
+import { resolveEtherfuseRampContext } from '@/lib/seyf/etherfuse-ramp-context'
 import { fetchUserMovements } from '@/lib/seyf/user-movements'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const ctx = await getEtherfuseRampContext()
-    const movements = await fetchUserMovements(ctx)
+    const wallet = new URL(req.url).searchParams.get('wallet')?.trim() ?? ''
+    const walletHint = wallet.length > 0 ? wallet : null
+    const ctx = await resolveEtherfuseRampContext({ walletPublicKeyHint: walletHint })
+    const movements = await fetchUserMovements(ctx, {
+      walletPublicKey: walletHint,
+    })
     return NextResponse.json({ movements }, {
       headers: { 'Cache-Control': 'no-store, max-age=0' },
     })

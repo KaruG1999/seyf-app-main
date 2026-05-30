@@ -1,15 +1,16 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { AppPageBody } from '@/components/app/app-page-body'
 import { Button } from '@/components/ui/button'
 import { Spinner } from '@/components/ui/spinner'
 import { Input } from '@/components/ui/input'
-import { OrderTransactionDetailCard, pickQuoteId } from '@/components/app/dev/etherfuse-order-cards'
+import { OrderTransactionDetailCard } from '@/components/app/dev/etherfuse-order-cards'
 import { SpeiPaymentCard } from '@/components/app/dev/spei-payment-card'
 import { cn } from '@/lib/utils'
+import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
 import { extractOrderIdFromCreateOrderResponse } from '@/lib/etherfuse/order-create-response'
 import {
   speiDetailsFromOnrampOrderApiJson,
@@ -19,7 +20,12 @@ import {
   extractConfirmedTxSignatureFromOnrampPanelJson,
   pickRampOrderTransactionDetails,
 } from '@/lib/etherfuse/orders-api'
-import { useEffect } from 'react'
+import {
+  type EtherfuseReadinessClientPayload,
+  etherfuseDepositBlockedCopy,
+  parseEtherfuseReadinessJson,
+} from '@/lib/seyf/etherfuse-readiness-cta'
+import { userFacingSeyfApiMessage } from '@/lib/seyf/parse-seyf-fetch-error'
 
 type RampContextPayload = {
   kycApproved: boolean
@@ -27,15 +33,18 @@ type RampContextPayload = {
   kycReason: string | null
 }
 
-type ReadinessPayload = {
-  onrampEnabled: boolean
-  reasons: string[]
+export type EtherfuseRampDevClientProps = {
+  /**
+   * - `landing`: solo CTA hacia /anadir/monto (evita tarjetas que parecen botón).
+   * - `deposit`: formulario de monto + flujo SPEI (por defecto si no se pasa `anadirScreen`).
+   */
+  anadirScreen?: 'landing' | 'deposit'
 }
 
-export default function EtherfuseRampDevClient() {
+export default function EtherfuseRampDevClient({ anadirScreen = 'deposit' }: EtherfuseRampDevClientProps) {
+  const { wallet, etherfusePublicKeyHint } = useSeyfWallet()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [targetOverride, setTargetOverride] = useState('')
   const [sourceAmount, setSourceAmount] = useState('500')
   const [orderJson, setOrderJson] = useState<string>('')
   const [fiatJson, setFiatJson] = useState<string>('')
@@ -43,7 +52,7 @@ export default function EtherfuseRampDevClient() {
   const [pendingManualOrderJson, setPendingManualOrderJson] = useState<string | null>(null)
   const [kycGate, setKycGate] = useState<RampContextPayload | null>(null)
   const [kycLoading, setKycLoading] = useState(true)
-  const [readiness, setReadiness] = useState<ReadinessPayload | null>(null)
+  const [readiness, setReadiness] = useState<EtherfuseReadinessClientPayload | null>(null)
 
   const run = useCallback(async (label: string, fn: () => Promise<void>) => {
     setErr(null)
@@ -86,75 +95,43 @@ export default function EtherfuseRampDevClient() {
       })
     fetch('/api/seyf/etherfuse/readiness')
       .then(async (r) => {
-        const j = (await r.json().catch(() => ({}))) as Partial<ReadinessPayload> & { error?: string }
+        const j = (await r.json().catch(() => ({}))) as { error?: string }
         if (!r.ok) {
           throw new Error(typeof j.error === 'string' ? j.error : `HTTP ${r.status}`)
         }
         if (cancelled) return
-        setReadiness({
-          onrampEnabled: j.onrampEnabled === true,
-          reasons: Array.isArray(j.reasons) ? j.reasons.filter((x): x is string => typeof x === 'string') : [],
-        })
+        const parsed = parseEtherfuseReadinessJson(j)
+        if (parsed) {
+          setReadiness(parsed)
+        } else {
+          setReadiness({
+            onrampEnabled: false,
+            reasons: ['Respuesta de readiness inesperada.'],
+            kycApproved: false,
+            agreementsAccepted: false,
+            bankAccountReady: false,
+            trustlineReady: false,
+            documentsUploaded: false,
+            webhookConfigured: false,
+          })
+        }
       })
       .catch((e) => {
         if (cancelled) return
         setReadiness({
           onrampEnabled: false,
           reasons: [e instanceof Error ? e.message : 'No pudimos calcular readiness.'],
+          kycApproved: false,
+          agreementsAccepted: false,
+          bankAccountReady: false,
+          trustlineReady: false,
+          documentsUploaded: false,
+          webhookConfigured: false,
         })
       })
     return () => {
       cancelled = true
     }
-  }, [])
-
-  const performQuote = useCallback(async (): Promise<string> => {
-    const body: { sourceAmount: string; targetAsset?: string } = {
-      sourceAmount: sourceAmount.trim() || '500',
-    }
-    const t = targetOverride.trim()
-    if (t) body.targetAsset = t
-    const res = await fetch('/api/seyf/etherfuse/quote/onramp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      const msg =
-        typeof data.error === 'string'
-          ? data.error
-          : `${res.status} ${res.statusText}${Object.keys(data).length ? ` — ${JSON.stringify(data)}` : ''}`
-      throw new Error(msg)
-    }
-    return JSON.stringify(data, null, 2)
-  }, [sourceAmount, targetOverride])
-
-  const performOrder = useCallback(async (qJson: string): Promise<string> => {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(qJson || '{}')
-    } catch {
-      throw new Error('Cotización JSON inválida')
-    }
-    const inner =
-      parsed && typeof parsed === 'object' && 'quote' in (parsed as object)
-        ? (parsed as { quote: unknown }).quote
-        : parsed
-    const quoteId = pickQuoteId(inner)
-    if (!quoteId) {
-      throw new Error('No encuentro quoteId en la cotización (~2 min de validez)')
-    }
-    const res = await fetch('/api/seyf/etherfuse/order/onramp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ quoteId }),
-    })
-    const data = await res.json().catch(() => ({}))
-    if (!res.ok) {
-      throw new Error(typeof data.error === 'string' ? data.error : res.statusText)
-    }
-    return JSON.stringify(data, null, 2)
   }, [])
 
   const performFiatSimulation = useCallback(async (oJson: string): Promise<string> => {
@@ -177,7 +154,7 @@ export default function EtherfuseRampDevClient() {
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {
-      throw new Error(typeof data.error === 'string' ? data.error : res.statusText)
+      throw new Error(userFacingSeyfApiMessage(data, res.status))
     }
 
     let orderPolled: unknown = null
@@ -216,12 +193,20 @@ export default function EtherfuseRampDevClient() {
 
   const openManualSpeiReview = () =>
     run('spei-manual-prepare', async () => {
-      const q = await performQuote()
-      const o = await performOrder(q)
-      const assetLabel =
-        targetOverride.trim()
-          ? targetOverride.trim().split(':')[0]?.trim() || 'CETES'
-          : 'CETES'
+      const body: { sourceAmount: string; targetAsset?: string } = {
+        sourceAmount: sourceAmount.trim() || '500',
+      }
+      const res = await fetch('/api/seyf/etherfuse/onramp/prepare-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(userFacingSeyfApiMessage(data, res.status))
+      }
+      const o = JSON.stringify(data, null, 2)
+      const assetLabel = 'CETES'
       const details = speiDetailsFromOnrampOrderApiJson(o, assetLabel, 'Etherfuse')
       if (!details) {
         throw new Error(
@@ -246,7 +231,14 @@ export default function EtherfuseRampDevClient() {
   }, [speiDetails, pendingManualOrderJson, performFiatSimulation, run])
 
   const speiConfirmBusy = busy === 'spei-manual-confirm'
-  const canOperate = (readiness?.onrampEnabled === true) || (!kycLoading && kycGate?.kycApproved === true)
+  const canOperate = readiness?.onrampEnabled === true
+  const readinessReasons = readiness?.reasons ?? []
+  const depositBlocked = etherfuseDepositBlockedCopy({
+    readiness,
+    kycLoading,
+    mode: 'deposit',
+    fallbackReason: kycGate?.kycReason ?? null,
+  })
 
   const onrampTxSignature = useMemo(
     () => extractConfirmedTxSignatureFromOnrampPanelJson(fiatJson),
@@ -266,133 +258,235 @@ export default function EtherfuseRampDevClient() {
     return `${base}${encodeURIComponent(onrampTxSignature)}`
   }, [onrampTxSignature])
 
-  const timeline = useMemo(() => {
-    const generated = Boolean(speiDetails)
-    const transferConfirmed = Boolean(fiatJson)
-    const accredited = Boolean(onrampTxSignature)
+  /** Solo pasos en lenguaje de banca; se muestra después de tener CLABE. */
+  const depositProgress = useMemo(() => {
+    const hasInstructions = Boolean(speiDetails)
+    const bankSent = Boolean(fiatJson)
+    const credited = Boolean(onrampTxSignature)
     return [
-      { label: 'Datos SPEI generados', done: generated },
-      { label: 'Transferencia detectada', done: transferConfirmed },
-      { label: 'Conversión y acreditación', done: accredited },
+      {
+        label: 'Listo: tienes CLABE e importe',
+        description: 'Copia los datos en tu app del banco.',
+        done: hasInstructions,
+      },
+      {
+        label: 'Tu banco envió el dinero',
+        description:
+          'Esperamos tu transferencia. Si la app te lo pide, confirma abajo que ya enviaste.',
+        done: bankSent,
+      },
+      {
+        label: 'Saldo en tu cuenta Seyf',
+        description: 'Cuando acredite verás el movimiento.',
+        done: credited,
+      },
     ]
   }, [speiDetails, fiatJson, onrampTxSignature])
 
-  return (
-    <AppPageBody className="space-y-6 pt-4">
-      <AppBackLink href="/dashboard" />
+  const showDepositProgress = Boolean(speiDetails || fiatJson || onrampTxSignature)
 
-      <section className="relative overflow-hidden rounded-[1.5rem] border border-[#bfd6ca] bg-gradient-to-br from-[#edf6f2] via-[#e6f0ea] to-[#dce9e3] p-5 dark:border-[#2b4a43] dark:bg-gradient-to-br dark:from-[#0d3531] dark:via-[#15534a] dark:to-[#1f6559]">
-        <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-[#9ec7b3]/25 blur-3xl dark:bg-[#6ba690]/25" />
-        <div className="pointer-events-none absolute -bottom-20 -left-12 h-44 w-44 rounded-full bg-[#b8b8b5]/20 blur-3xl dark:bg-[#22433c]/40" />
-        <div className="relative">
-          <div className="mb-3 flex items-center justify-between gap-3">
-            <p className="inline-flex rounded-full border border-[#b8b8b5]/60 bg-white/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-[#5f7168] dark:border-white/20 dark:bg-white/15 dark:text-[#d2e9df]">
-            Depósito SPEI
+  if (anadirScreen === 'landing') {
+    return (
+      <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
+        <AppBackLink href="/dashboard" />
+
+        {!canOperate ? (
+          <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
+            <p className="text-sm font-bold text-foreground">{depositBlocked.title}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{depositBlocked.lead}</p>
+            {readinessReasons.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+                {readinessReasons.slice(0, 5).map((r) => (
+                  <li key={r}>{r}</li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 flex flex-col gap-2">
+              <Link
+                href={depositBlocked.primaryLink.href}
+                className="inline-flex text-sm font-semibold text-foreground underline"
+              >
+                {depositBlocked.primaryLink.label}
+              </Link>
+              {depositBlocked.extraLinks.map((item) => (
+                <Link
+                  key={item.href + item.label}
+                  href={item.href}
+                  className="inline-flex text-xs font-medium text-muted-foreground underline decoration-muted-foreground/60"
+                >
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : (
+          <section className="space-y-4 rounded-[1.5rem] border border-border bg-card p-5">
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                Depósito SPEI
+              </p>
+              <h1 className="mt-2 text-xl font-black tracking-tight text-foreground sm:text-2xl">
+                Añadir fondos
+              </h1>
+              <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                Indica en el siguiente paso cuánto vas a enviar; generamos la cotización y te mostramos la CLABE,
+                el beneficiario y el importe exacto para hacer la transferencia desde tu banco.
+              </p>
+            </div>
+            <Button
+              asChild
+              size="lg"
+              className="h-14 w-full rounded-2xl text-base font-bold shadow-md"
+            >
+              <Link href="/anadir/monto">Genera datos de depósito</Link>
+            </Button>
+          </section>
+        )}
+
+        {err && (
+          <p className="rounded-[1rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {err}
+          </p>
+        )}
+      </AppPageBody>
+    )
+  }
+
+  return (
+    <AppPageBody className="space-y-6 px-4 pt-3 sm:px-6 sm:pt-4">
+      <AppBackLink href="/anadir" />
+
+      {!canOperate ? (
+        <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
+          <p className="text-sm font-bold text-foreground">{depositBlocked.title}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{depositBlocked.lead}</p>
+          {readinessReasons.length ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
+              {readinessReasons.slice(0, 5).map((r) => (
+                <li key={r}>{r}</li>
+              ))}
+            </ul>
+          ) : null}
+          <div className="mt-3 flex flex-col gap-2">
+            <Link
+              href={depositBlocked.primaryLink.href}
+              className="inline-flex text-sm font-semibold text-foreground underline"
+            >
+              {depositBlocked.primaryLink.label}
+            </Link>
+            {depositBlocked.extraLinks.map((item) => (
+              <Link
+                key={item.href + item.label}
+                href={item.href}
+                className="inline-flex text-xs font-medium text-muted-foreground underline decoration-muted-foreground/60"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {canOperate ? (
+        <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-4 dark:border-border dark:bg-card/80 sm:p-5">
+          {wallet && !etherfusePublicKeyHint ? (
+            <p className="rounded-xl border border-amber-500/35 bg-amber-500/[0.08] px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100/90">
+              Tu sesión Pollar muestra un identificador que aún no es una clave Stellar <span className="font-mono">G…</span> reconocible
+              por Etherfuse. El depósito usará la sesión de <Link href="/identidad" className="font-semibold underline">/identidad</Link>.
+              Si el error persiste, abre devnet y confirma KYC y cuenta bancaria.
+            </p>
+          ) : null}
+          <div>
+            <h2 className="text-base font-bold text-foreground">¿Cuánto vas a depositar?</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Monto en pesos. Necesitamos el importe exacto para generar los datos de transferencia SPEI.
             </p>
           </div>
-          <h1 className="text-2xl font-black tracking-tight text-[#41534b] dark:text-white">Añadir fondos</h1>
-          <p className="mt-1.5 text-sm text-[#7b8f86] dark:text-[#d2e9df]">
-            Genera tu CLABE y realiza la transferencia desde tu banca móvil.
-          </p>
-        </div>
-      </section>
+          <Input
+            id="manual-amount"
+            name="deposit-amount-mxn"
+            autoComplete="off"
+            inputMode="decimal"
+            value={sourceAmount}
+            onChange={(e) => setSourceAmount(e.target.value)}
+            placeholder="Ej. 500.00"
+            className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
+            aria-label="Monto en pesos mexicanos"
+          />
+          <Button
+            type="button"
+            className="h-14 w-full rounded-2xl bg-foreground text-base font-bold text-background shadow-md"
+            disabled={!!busy}
+            onClick={() => void openManualSpeiReview()}
+          >
+            {busy === 'spei-manual-prepare' ? (
+              <>
+                <Spinner className="size-4 text-background" />
+                Generando datos…
+              </>
+            ) : (
+              'Genera datos de depósito'
+            )}
+          </Button>
+        </section>
+      ) : null}
 
       <SpeiPaymentCard
         details={speiDetails}
         concept={speiDetails?.orderId ?? null}
       />
-      <section className="rounded-[1.25rem] border border-border bg-card/60 p-4">
-        <p className="text-sm font-bold text-foreground">Estado del depósito</p>
-        <div className="mt-3 space-y-2">
-          {timeline.map((step) => (
-            <div key={step.label} className="flex items-center justify-between rounded-lg border border-border/70 px-3 py-2">
-              <span className="text-sm text-foreground">{step.label}</span>
-              <span
-                className={cn(
-                  'text-xs font-semibold',
-                  step.done ? 'text-emerald-500' : 'text-muted-foreground',
-                )}
-              >
-                {step.done ? 'Completado' : 'Pendiente'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
-      {!canOperate ? (
-        <section className="rounded-[1.25rem] border border-amber-500/30 bg-amber-500/[0.08] p-4">
-          <p className="text-sm font-bold text-foreground">Verificación requerida</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {kycLoading
-              ? 'Validando estado KYC...'
-              : kycGate?.kycReason ??
-                'Necesitas aprobar KYC para generar CLABE y recibir tus datos de deposito.'}
-          </p>
-          {readiness?.reasons?.length ? (
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-              {readiness.reasons.slice(0, 3).map((r) => (
-                <li key={r}>{r}</li>
-              ))}
-            </ul>
-          ) : null}
-          <Link href="/identidad" className="mt-3 inline-block text-sm font-semibold text-foreground underline">
-            Ir a verificar identidad
-          </Link>
-        </section>
-      ) : null}
+
       {speiDetails && pendingManualOrderJson ? (
         <Button
           type="button"
-          className="w-full"
+          className="h-12 w-full rounded-2xl border border-[#1b6155]/40 bg-gradient-to-br from-[#15534a] to-[#1b6155] text-[15px] font-bold text-white shadow-[0_8px_24px_rgba(21,83,74,0.35)] hover:from-[#1a5f52] hover:to-[#1f6d61] disabled:opacity-60 dark:border-emerald-950/30 dark:shadow-[0_8px_28px_rgba(8,42,36,0.45)]"
           disabled={!!busy || !canOperate}
           onClick={() => void confirmSpeiPayment()}
         >
           {speiConfirmBusy ? (
             <>
-              <Spinner className="size-4 text-background" />
+              <Spinner className="size-4 text-white" />
               Procesando…
             </>
           ) : (
-            'Ya hice la transferencia'
+            'Ya hice la transferencia desde mi banco'
           )}
         </Button>
       ) : null}
 
-      <section className="space-y-4 rounded-[1.5rem] border border-border bg-card/80 p-4 shadow-[0_10px_30px_rgba(0,0,0,0.2)]">
-        <h2 className="text-sm font-bold text-foreground">Monto en pesos</h2>
-        <Input
-          id="manual-amount"
-          inputMode="decimal"
-          value={sourceAmount}
-          onChange={(e) => setSourceAmount(e.target.value)}
-          placeholder="Monto MXN"
-          className="h-12 rounded-xl border-border bg-background px-4 tabular-nums"
-          aria-label="Monto MXN"
-        />
-        <Input
-          id="manual-asset"
-          value={targetOverride}
-          onChange={(e) => setTargetOverride(e.target.value)}
-          placeholder="Referencia opcional"
-          className="h-12 rounded-xl border-border bg-background px-4 font-mono text-xs"
-          aria-label="Referencia opcional"
-        />
-        <Button
-          type="button"
-          className="w-full rounded-full bg-foreground text-background"
-          disabled={!!busy || !canOperate}
-          onClick={() => void openManualSpeiReview()}
-        >
-          {busy === 'spei-manual-prepare' ? (
-            <>
-              <Spinner className="size-4 text-background" />
-              Cargando…
-            </>
-          ) : (
-            'Generar datos de depósito'
-          )}
-        </Button>
-      </section>
+      {showDepositProgress ? (
+        <section className="rounded-[1.25rem] border border-border bg-card/60 p-4">
+          <p className="text-sm font-bold text-foreground">Seguimiento del depósito</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Así va tu transferencia; no hace falta entender términos técnicos.
+          </p>
+          <div className="mt-3 space-y-3">
+            {depositProgress.map((step) => (
+              <div
+                key={step.label}
+                className="rounded-xl border border-border/70 bg-background/50 px-3 py-2.5"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground">{step.label}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">
+                      {step.description}
+                    </p>
+                  </div>
+                  <span
+                    className={cn(
+                      'shrink-0 text-xs font-bold',
+                      step.done ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground',
+                    )}
+                  >
+                    {step.done ? 'Listo' : 'Pendiente'}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {err && (
         <p className="mt-6 rounded-[1rem] border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">

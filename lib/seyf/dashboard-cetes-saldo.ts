@@ -30,6 +30,20 @@ export type DashboardCetesSaldo =
   | { kind: "disabled" }
   | { kind: "error"; message: string };
 
+function userSafeDashboardErrorMessage(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes("forbidden") || m.includes("\"type\":\"forbidden\"")) {
+    return "No pudimos consultar tu saldo con Etherfuse. Verifica API key y entorno (sandbox/producción).";
+  }
+  if (m.includes("organization not found")) {
+    return "No encontramos tu organización de Etherfuse para esta API key/entorno.";
+  }
+  if (m.includes("api key") || m.includes("unauthorized") || m.includes("401")) {
+    return "Tu configuración de Etherfuse no está autorizada en este entorno.";
+  }
+  return "No pudimos calcular tu saldo en pesos en este momento.";
+}
+
 /**
  * Saldo mostrado en MXN = balance CETES (GET /ramp/assets) × tipo offramp CETES→MXN
  * (POST /ramp/quote: `destinationAmount` / `sourceAmount`; OpenAPI QuoteResponse).
@@ -80,6 +94,6 @@ export async function fetchDashboardCetesSaldo(
     };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Error al cargar saldo CETES";
-    return { kind: "error", message };
+    return { kind: "error", message: userSafeDashboardErrorMessage(message) };
   }
 }

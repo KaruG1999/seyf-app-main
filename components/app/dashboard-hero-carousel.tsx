@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { animate, motion, useMotionValue, useReducedMotion } from 'framer-motion'
-import { ArrowDownToLine, Clock, Info, Plus, Send } from 'lucide-react'
+import { ArrowDownToLine, Clock, Info, Send } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { formatMXN, formatPuntos, splitCurrencyForDisplay } from '@/lib/formatters'
@@ -14,6 +15,7 @@ type HeroData = {
   puntos: number
   tasaAnual: number
   advanceUsed?: boolean
+  isTestnet?: boolean
   /** CETES desde Etherfuse /lookup/stablebonds */
   stablebondCetes?: {
     loading: boolean
@@ -28,16 +30,6 @@ type HeroData = {
     priceLoading: boolean
   }
 }
-
-const TABS = ['Saldos', 'Adelanto', 'Puntos'] as const
-const SLIDE_COUNT = TABS.length
-
-const saldosQuickActions = [
-  { href: '/depositar', label: 'Depositar', icon: Plus },
-  { href: '/retirar', label: 'Transferir', icon: ArrowDownToLine },
-  { href: '/historial', label: 'Movimientos', icon: Clock },
-  { href: '/identidad', label: 'Verificar', icon: Info },
-] as const
 
 const spring = { type: 'spring' as const, stiffness: 420, damping: 38, mass: 0.85 }
 
@@ -62,7 +54,14 @@ function formatCetesUnits(n: number) {
   }).format(n)
 }
 
-export function DashboardHeroCarousel({ data }: { data: HeroData }) {
+export function DashboardHeroCarousel({
+  data,
+  onIndexChange,
+}: {
+  data: HeroData
+  onIndexChange?: (index: number) => void
+}) {
+  const t = useTranslations('dashboard.hero')
   const { main: balanceMain, cents: balanceCents } = splitCurrencyForDisplay(data.principal)
   const shouldReduce = useReducedMotion()
   const sb = data.stablebondCetes
@@ -75,6 +74,16 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
   const x = useMotionValue(0)
   const indexRef = useRef(0)
   indexRef.current = index
+
+  const TABS = [t('tabs.saldos'), t('tabs.adelanto'), t('tabs.puntos')]
+  const SLIDE_COUNT = TABS.length
+
+  const saldosQuickActions = [
+    { href: '/anadir', label: t('quickDeposit'), icon: ArrowDownToLine },
+    { href: '/retirar', label: t('quickTransfer'), icon: Send },
+    { href: '/historial', label: t('quickMovements'), icon: Clock },
+    { href: '/identidad', label: t('quickVerify'), icon: Info },
+  ]
 
   useLayoutEffect(() => {
     const el = containerRef.current
@@ -95,6 +104,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
     (i: number) => {
       const clamped = Math.max(0, Math.min(SLIDE_COUNT - 1, i))
       setIndex(clamped)
+      onIndexChange?.(clamped)
       if (viewportW <= 0) return
       if (shouldReduce) {
         x.set(-clamped * viewportW)
@@ -102,7 +112,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
         animate(x, -clamped * viewportW, spring)
       }
     },
-    [viewportW, x, shouldReduce],
+    [viewportW, x, shouldReduce, onIndexChange, SLIDE_COUNT],
   )
 
   const onDragEnd = (_: unknown, info: { offset: { x: number }; velocity: { x: number } }) => {
@@ -142,7 +152,9 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
           onDragEnd={onDragEnd}
         >
           <div className="w-1/3 shrink-0 px-4 pb-4 pt-10 text-center">
-            <p className="text-[13px] font-medium text-muted-foreground">Saldo disponible</p>
+            <p className="text-[13px] font-medium text-muted-foreground">
+              {data.isTestnet ? t('balanceLabel') : t('balanceLabelMainnet')}
+            </p>
             <div className="mt-1 flex justify-center">
               <p className="inline-flex flex-wrap items-baseline justify-center gap-0.5 leading-none tracking-tight text-foreground">
                 <span className="text-[2.35rem] font-black tabular-nums sm:text-[2.65rem]">{balanceMain}</span>
@@ -184,7 +196,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
             {cw && cw.balance > 0 ? (
               <div className="mx-auto mt-4 max-w-[19rem] rounded-xl border border-violet-500/25 bg-violet-500/[0.08] px-3 py-2.5 text-center ring-1 ring-border/50">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Saldo invertido
+                  {t('cetesInvested')}
                 </p>
                 <p className="mt-1 text-xl font-black tabular-nums leading-tight text-foreground">
                   {formatCetesUnits(cw.balance)}{' '}
@@ -201,13 +213,18 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
                   </p>
                 ) : (
                   <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-                    Sin referencia disponible. Reintenta en un momento.
+                    {t('cetesNoRef')}
                   </p>
                 )}
                 <p className="mt-1.5 text-[9px] leading-tight text-muted-foreground/80">
-                  Valor estimado para consulta. Puede variar.
+                  {t('cetesEstimated')}
                 </p>
               </div>
+            ) : null}
+            {cw && cw.balance > 0 && !data.isTestnet ? (
+              <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+                {t('cetesNotIncluded')}
+              </p>
             ) : null}
 
             <div
@@ -239,16 +256,16 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
               data.advanceUsed && 'pointer-events-none opacity-40 grayscale',
             )}
           >
-            <p className="text-[13px] font-medium text-muted-foreground">Adelanto</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t('adelantoLabel')}</p>
             <p className="mt-1 text-[2.75rem] font-black leading-none tracking-tight tabular-nums text-foreground">
               {formatMXN(data.adelantable)}
             </p>
             {data.advanceUsed ? (
               <span className="mt-2 inline-block rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                Adelanto en curso
+                {t('adelantoUsed')}
               </span>
             ) : (
-              <p className="mt-2 text-xs text-muted-foreground">Sin tocar tu capital principal</p>
+              <p className="mt-2 text-xs text-muted-foreground">{t('adelantoNoTouch')}</p>
             )}
             <Link
               href="/adelanto"
@@ -256,17 +273,17 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
               onPointerDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
-              Más información →
+              {t('adelantoMore')}
             </Link>
           </div>
 
           <div className="w-1/3 shrink-0 px-6 pb-2 pt-10 text-center">
-            <p className="text-[13px] font-medium text-muted-foreground">Seyf Puntos</p>
+            <p className="text-[13px] font-medium text-muted-foreground">{t('puntosLabel')}</p>
             <p className="mt-1 text-[2.75rem] font-black leading-none tracking-tight tabular-nums text-foreground">
               {formatPuntos(data.puntos)}
             </p>
-            <p className="mt-2 text-xs text-muted-foreground">Por usar Seyf y referir amigos</p>
-            <p className="mt-4 text-xs font-medium text-muted-foreground">Canjes próximamente</p>
+            <p className="mt-2 text-xs text-muted-foreground">{t('puntosSubtitle')}</p>
+            <p className="mt-4 text-xs font-medium text-muted-foreground">{t('puntosComingSoon')}</p>
           </div>
         </motion.div>
       </div>
@@ -304,7 +321,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
             {data.adelantable > 0 ? (
               <Link href="/adelanto" className="w-full max-w-xs">
                 <Button className="h-11 w-full rounded-full bg-foreground text-sm font-bold text-background hover:bg-foreground/90">
-                  Pedir adelanto
+                  {t('requestAdelanto')}
                 </Button>
               </Link>
             ) : (
@@ -312,7 +329,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
                 disabled
                 className="h-11 w-full max-w-xs rounded-full bg-foreground/40 text-sm font-bold text-background/60 cursor-not-allowed"
               >
-                Pedir adelanto
+                {t('requestAdelanto')}
               </Button>
             )}
           </div>
@@ -325,7 +342,7 @@ export function DashboardHeroCarousel({ data }: { data: HeroData }) {
               disabled
               className="rounded-full px-5 py-2 text-sm font-semibold opacity-60 ring-1 ring-border"
             >
-              Ver catálogo
+              {t('viewCatalog')}
             </Button>
           </div>
         )}

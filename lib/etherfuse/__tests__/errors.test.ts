@@ -42,11 +42,19 @@ describe("mapEtherfuseHttpError() — unit tests", () => {
     expect(err.retryable).toBe(false);
   });
 
-  it("maps 4xx (not 429) to generic_error with statusCode:400", () => {
+  it("maps 4xx (not 429) to provider_rejected with statusCode:400", () => {
     const err = mapEtherfuseHttpError(404, "not found");
-    expect(err.code).toBe("generic_error");
+    expect(err.code).toBe("provider_rejected");
     expect(err.statusCode).toBe(400);
     expect(err.retryable).toBe(false);
+  });
+
+  it("maps invalid HTTP status to provider_unavailable 502", () => {
+    const err = mapEtherfuseHttpError(Number.NaN, "body");
+    expect(err.code).toBe("provider_unavailable");
+    expect(err.statusCode).toBe(502);
+    const err0 = mapEtherfuseHttpError(0, "timeout");
+    expect(err0.code).toBe("provider_unavailable");
   });
 });
 
@@ -86,15 +94,15 @@ describe("mapEtherfuseHttpError() — property tests", () => {
     );
   });
 
-  it(// Feature: etherfuse-client-hardening, Property 12: HTTP 4xx (not 429) maps to generic_error 400
+  it(// Feature: etherfuse-client-hardening, Property 12: HTTP 4xx (not 429) maps to provider_rejected 400
   // Validates: Requirements 4.4
-  "P12: any 4xx status (except 429) maps to generic_error with statusCode 400", () => {
+  "P12: any 4xx status (except 429) maps to provider_rejected with statusCode 400", () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 400, max: 499 }).filter((s) => s !== 429),
         (status) => {
           const err = mapEtherfuseHttpError(status, "client error");
-          expect(err.code).toBe("generic_error");
+          expect(err.code).toBe("provider_rejected");
           expect(err.statusCode).toBe(400);
         },
       ),

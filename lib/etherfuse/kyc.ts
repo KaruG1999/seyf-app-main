@@ -43,6 +43,7 @@ export type EtherfuseKycSubmitIdentity = {
   email?: string;
   phoneNumber?: string;
   occupation?: string;
+  accountType?: string;
   name: { givenName: string; familyName: string };
   dateOfBirth: string;
   address: {
@@ -108,6 +109,17 @@ function isKycStatus(s: string): s is EtherfuseKycStatus {
   );
 }
 
+/** Etherfuse puede devolver "compliant" tras submit programático — lo mapeamos a "proposed". */
+function normalizeKycStatus(s: string | undefined | null): EtherfuseKycStatus {
+  if (!s) return "proposed"
+  if (isKycStatus(s)) return s
+  if (s === "compliant") return "proposed"
+  // Cualquier otro valor desconocido rechaza silenciosamente con proposed
+  // para no romper el flujo, pero se logea para detectar cambios de API
+  console.warn(`[kyc] Etherfuse devolvió status desconocido: "${s}" — normalizado a "proposed"`)
+  return "proposed"
+}
+
 /**
  * GET /ramp/customer/{customer_id}/kyc/{pubkey}
  * @see https://docs.etherfuse.com/api-reference/kyc/get-kyc-status
@@ -136,7 +148,12 @@ export async function fetchEtherfuseKycStatus(
     return { ok: false, reason: "invalid_body" };
   }
   const statusRaw = json.status;
-  if (typeof statusRaw !== "string" || !isKycStatus(statusRaw)) {
+  if (typeof statusRaw !== "string") {
+    return { ok: false, reason: "invalid_body" };
+  }
+  // Normalizar "compliant" (sandbox) antes de validar
+  const normalizedStatusRaw = normalizeKycStatus(statusRaw)
+  if (!isKycStatus(normalizedStatusRaw)) {
     return { ok: false, reason: "invalid_body" };
   }
   const cid = json.customerId;
@@ -150,7 +167,7 @@ export async function fetchEtherfuseKycStatus(
     data: {
       customerId: cid,
       walletPublicKey: wpk,
-      status: statusRaw,
+      status: normalizedStatusRaw,
       approvedAt:
         json.approvedAt === null || json.approvedAt === undefined
           ? null
@@ -173,12 +190,18 @@ export async function fetchEtherfuseKycStatus(
 export async function submitEtherfuseKycIdentityData(params: {
   customerId: string;
   pubkey?: string;
+  accountType?: string;
   identity: EtherfuseKycSubmitIdentity;
 }): Promise<{ status: EtherfuseKycStatus; message: string | null }> {
   const path = `/ramp/customer/${encodeURIComponent(params.customerId)}/kyc`;
+  const resolvedAccountType = params.accountType ?? 'personal'
   const body = {
     ...(params.pubkey ? { pubkey: params.pubkey } : {}),
-    identity: params.identity,
+    accountType: resolvedAccountType,
+    identity: {
+      ...params.identity,
+      accountType: resolvedAccountType, // after spread so undefined from params.identity doesn't override
+    },
   };
   const res = await etherfuseFetch(path, {
     method: "POST",
@@ -196,12 +219,9 @@ export async function submitEtherfuseKycIdentityData(params: {
       `Etherfuse KYC submit respondió sin JSON (${res.status}): ${text.slice(0, 400)}`,
     );
   }
-  const statusRaw = json.status;
-  if (typeof statusRaw !== "string" || !isKycStatus(statusRaw)) {
-    throw new Error(`Etherfuse KYC submit devolvió status inválido: ${text.slice(0, 400)}`);
-  }
+  const status = normalizeKycStatus(typeof json.status === "string" ? json.status : null)
   return {
-    status: statusRaw,
+    status,
     message: typeof json.message === "string" ? json.message : null,
   };
 }
@@ -238,12 +258,9 @@ export async function uploadEtherfuseKycDocuments(params: {
       `Etherfuse KYC documents respondió sin JSON (${res.status}): ${text.slice(0, 400)}`,
     );
   }
-  const statusRaw = json.status;
-  if (typeof statusRaw !== "string" || !isKycStatus(statusRaw)) {
-    throw new Error(`Etherfuse KYC documents devolvió status inválido: ${text.slice(0, 400)}`);
-  }
+  const status = normalizeKycStatus(typeof json.status === "string" ? json.status : null)
   return {
-    status: statusRaw,
+    status,
     message: typeof json.message === "string" ? json.message : null,
   };
 }

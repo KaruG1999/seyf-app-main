@@ -49,6 +49,51 @@ export async function fetchOrdersFirstPage(): Promise<OrderRow[]> {
 }
 
 /**
+ * Todas las páginas de órdenes a nivel de organización (POST /ramp/orders con paginación).
+ * Útil en sandbox donde las wallets se registran al nivel de org, no de customer.
+ */
+export async function fetchOrgOrdersAllPages(
+  maxPages = 20,
+): Promise<OrderRow[]> {
+  const collected: OrderRow[] = [];
+  const seenIds = new Set<string>();
+  for (let pageNumber = 0; pageNumber < maxPages; pageNumber++) {
+    const res = await etherfuseFetch("/ramp/orders", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pageSize: 100, pageNumber }),
+    });
+    const { json, text } = await etherfuseReadBody<{
+      items?: OrderRow[];
+      totalPages?: number;
+    }>(res);
+    if (!res.ok) {
+      if (pageNumber === 0) {
+        // fallback to GET first page
+        return fetchOrdersFirstPage();
+      }
+      throw mapEtherfuseHttpError(res.status, text.slice(0, 400));
+    }
+    const items = Array.isArray(json?.items) ? json.items : [];
+    for (const row of items) {
+      if (!row || typeof row !== "object") continue;
+      const oid = orderIdFromRow(row as OrderRow);
+      if (oid) {
+        if (seenIds.has(oid)) continue;
+        seenIds.add(oid);
+      }
+      collected.push(row as OrderRow);
+    }
+    const tp = json?.totalPages;
+    const totalKnown = typeof tp === "number" && tp >= 1 ? tp : null;
+    if (totalKnown != null && pageNumber + 1 >= totalKnown) break;
+    if (items.length === 0) break;
+    if (totalKnown == null && items.length < 100) break;
+  }
+  return collected;
+}
+
+/**
  * GET /ramp/customer/{customer_id}/orders — primera página (órdenes del cliente).
  * @see https://docs.etherfuse.com/api-reference/customers/get-customer-orders
  */
@@ -134,16 +179,19 @@ export async function fetchCustomerOrdersAllPages(
 }
 
 /**
- * Busca onramp pendiente (status created) con mismo banco y mismo monto fiat.
+ * Busca onramp pendiente (status created o funded) con mismo banco y mismo monto fiat.
+ * "funded" = MXN recibido pero CETES aún en proceso — sigue siendo una orden "en curso".
  */
 export function findPendingOnrampOrderForAmount(
   orders: OrderRow[],
   bankAccountId: string,
   amountMxn: number,
 ): string | null {
+  const PENDING_STATUSES = new Set(["created", "funded", "processing"])
   for (const row of orders) {
     if (typeFromRow(row)?.toLowerCase() !== "onramp") continue;
-    if (statusFromRow(row)?.toLowerCase() !== "created") continue;
+    const rowStatus = statusFromRow(row)?.toLowerCase() ?? ""
+    if (!PENDING_STATUSES.has(rowStatus)) continue;
     if (bankFromRow(row) !== bankAccountId) continue;
     const fiat = amountFiatFromRow(row);
     if (fiat === undefined) continue;
