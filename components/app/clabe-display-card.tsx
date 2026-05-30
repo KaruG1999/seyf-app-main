@@ -80,6 +80,7 @@ function EmptyState({
   onCrear,
   creating,
   error,
+  t,
 }: {
   onCrear: () => void;
   creating: boolean;
@@ -113,12 +114,12 @@ function EmptyState({
         {creating ? (
           <>
             <RefreshCw className="size-4 animate-spin" />
-            Creando CLABE…
+            {t('creating')}
           </>
         ) : (
           <>
             <Sparkles className="size-4" />
-            Obtener mi CLABE
+            {t('create')}
           </>
         )}
       </Button>
@@ -172,7 +173,7 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
         "relative overflow-hidden rounded-[1.75rem] border border-border",
         className,
       )}
-      aria-label="Tu CLABE para depósitos SPEI"
+      aria-label={t('ariaSection')}
     >
       {/* fondo degradado */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-violet-950/80 via-card to-blue-950/60" />
@@ -201,7 +202,7 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
               />
             </div>
             <span className="text-[13px] font-semibold text-muted-foreground">
-              CLABE interbancaria
+              {t('interbank')}
             </span>
           </div>
           {clabe && <StatusBadge status={clabe.status} />}
@@ -236,7 +237,7 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                 {!isValid && (
                   <p className="flex items-center justify-center gap-1 text-[11px] text-amber-400/90">
                     <AlertCircle className="size-3" />
-                    Dígito verificador inválido
+                    {t('invalidDigit')}
                   </p>
                 )}
               </div>
@@ -248,17 +249,17 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                   size="sm"
                   onClick={handleCopy}
                   className="h-10 gap-2 rounded-full px-5 ring-1 ring-border/60 transition-all"
-                  aria-label="Copiar CLABE"
+                  aria-label={t('copyCLABE')}
                 >
                   {copied ? (
                     <>
                       <Check className="size-3.5 text-emerald-400" />
-                      <span className="text-emerald-400">Copiada</span>
+                      <span className="text-emerald-400">{t('copied')}</span>
                     </>
                   ) : (
                     <>
                       <Copy className="size-3.5" />
-                      Copiar CLABE
+                      {t('copyCLABE')}
                     </>
                   )}
                 </Button>
@@ -269,8 +270,8 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                   onClick={handleCrear}
                   disabled={isPending}
                   className="size-10 rounded-full"
-                  title="Crear nueva CLABE"
-                  aria-label="Crear nueva CLABE"
+                  title={t('refreshCLABE')}
+                  aria-label={t('refreshCLABE')}
                 >
                   <RefreshCw
                     className={cn("size-4", isPending && "animate-spin")}
@@ -284,10 +285,10 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
               {/* instrucciones SPEI */}
               <div className="space-y-3">
                 <p className="text-center text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">
-                  Instrucciones para transferir
+                  {t('instructions')}
                 </p>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <SpeiRow label="Banco receptor" value="Juno / Bitso" />
+                  <SpeiRow label={t('bank')} value={t('bankValue')} />
                   <SpeiRow
                     label="Cuenta vinculada"
                     value={
@@ -297,7 +298,7 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                     }
                   />
                   <SpeiRow
-                    label="Monto mínimo"
+                    label={t('minAmount')}
                     value={
                       clabe.deposit_minimum_amount != null
                         ? `$${clabe.deposit_minimum_amount.toLocaleString("es-MX")} MXN`
@@ -305,8 +306,8 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                     }
                   />
                   <SpeiRow
-                    label="Disponible en"
-                    value="Inmediato (SPEI 24/7)"
+                    label={t('available')}
+                    value={t('availableValue')}
                   />
                 </div>
 
@@ -314,23 +315,23 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
                 {maxAmounts?.daily != null && (
                   <div className="rounded-xl border border-border/60 bg-secondary/40 px-3.5 py-2.5">
                     <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                      Límites de depósito
+                      {t('depositLimits')}
                     </p>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
                       {maxAmounts.operation != null && (
                         <LimitRow
-                          label="Por operación"
+                          label={t('limitByOp')}
                           value={maxAmounts.operation}
                         />
                       )}
                       {maxAmounts.daily != null && (
-                        <LimitRow label="Diario" value={maxAmounts.daily} />
+                        <LimitRow label={t('limitDaily')} value={maxAmounts.daily} />
                       )}
                       {maxAmounts.weekly != null && (
-                        <LimitRow label="Semanal" value={maxAmounts.weekly} />
+                        <LimitRow label={t('limitWeekly')} value={maxAmounts.weekly} />
                       )}
                       {maxAmounts.monthly != null && (
-                        <LimitRow label="Mensual" value={maxAmounts.monthly} />
+                        <LimitRow label={t('limitMonthly')} value={maxAmounts.monthly} />
                       )}
                     </div>
                   </div>

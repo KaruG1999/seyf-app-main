@@ -52,14 +52,14 @@ export default function RegistroPage() {
             cuenta.
           </h2>
           <p className="mt-4 text-base text-muted-foreground font-normal">
-            Solo toma 2 minutos. Sin complicaciones.
+            {t('subtitle')}
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
             type="text"
-            placeholder="Nombre completo"
+            placeholder={t('namePlaceholder')}
             value={form.nombre}
             onChange={handleChange("nombre")}
             required
