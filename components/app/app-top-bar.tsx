@@ -71,14 +71,14 @@ export default function AppTopBar() {
         </div>
         <Link
           href="/estadisticas"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary ring-1 ring-border transition hover:bg-secondary/80"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary ring-1 ring-border transition hover:bg-secondary/80 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="Estadísticas y tipo de cambio"
         >
           <BarChart3 className="size-[1.15rem] text-foreground" strokeWidth={2} />
         </Link>
         <Link
           href="/tarjeta"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary ring-1 ring-border transition hover:bg-secondary/80"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary ring-1 ring-border transition hover:bg-secondary/80 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           aria-label="Tarjeta virtual"
         >
           <CreditCard className="size-[1.15rem] text-foreground" strokeWidth={2} />
