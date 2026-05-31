@@ -8,6 +8,8 @@ import { AppPageBody } from '@/components/app/app-page-body'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { Label } from '@/components/ui/label'
+import { mxnToSpanishWords } from '@/lib/formatters'
 
 function formatMXN(amount: number) {
   return new Intl.NumberFormat('es-MX', {
@@ -218,8 +220,13 @@ export default function AdelantoPage() {
         </section>
 
         <div className="space-y-3 rounded-[1.5rem] bg-card p-5 shadow-[0_8px_28px_rgba(0,0,0,0.14)]">
-          <SummaryRow label="Adelanto recibido" value={formatMXN(simulation?.net_to_user_mxn || 0)} bold />
-          <div className="border-t border-border/60 pt-3">
+          <SummaryRow
+            label="Adelanto recibido"
+            value={formatMXN(simulation?.net_to_user_mxn || 0)}
+            numericValue={simulation?.net_to_user_mxn || 0}
+            bold
+          />
+          <div className="border-t border-border pt-3">
             <SummaryRow label="Referencia de operación" value={txHash?.slice(0, 8) + '...' + txHash?.slice(-8)} dim />
           </div>
         </div>
@@ -232,7 +239,7 @@ export default function AdelantoPage() {
         <button
           type="button"
           onClick={() => router.push('/dashboard')}
-          className="w-full py-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground"
+          className="w-full py-2 text-sm font-semibold text-muted-foreground transition hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl"
         >
           Volver al inicio
         </button>
@@ -257,7 +264,7 @@ export default function AdelantoPage() {
             Adelanto de rendimiento
           </p>
           <h1 className="mt-2 text-2xl font-black tracking-tight text-[#41534b] dark:text-white">Obtén liquidez hoy</h1>
-          <p className="mt-1.5 text-sm text-[#7b8f86] dark:text-[#d2e9df]">
+          <p className="mt-1.5 text-sm text-[#4a5f54] dark:text-[#d2e9df]">
             Adelanta una parte de tu rendimiento proyectado sin esperar al vencimiento.
             <span className="mt-1 block font-bold text-[#41534b] dark:text-white">Tu saldo se mantiene protegido por reglas de bloqueo.</span>
           </p>
@@ -283,17 +290,18 @@ export default function AdelantoPage() {
           />
         </div>
         <div className="rounded-xl bg-secondary/40 px-3 py-3">
-          <p className="text-[11px] text-muted-foreground">
+          <Label htmlFor="years-range-input" className="text-[11px] text-muted-foreground">
             Años de rendimiento a adelantar (máx. por tope 90%: {simulation?.years_max_allowed ?? 1})
-          </p>
+          </Label>
           <input
+            id="years-range-input"
             type="range"
             min={1}
             max={simulation?.years_max_allowed ?? 1}
             step={1}
             value={Math.min(years, simulation?.years_max_allowed ?? 1)}
             onChange={(e) => setYears(Number.parseInt(e.target.value, 10) || 1)}
-            className="mt-2 w-full"
+            className="mt-2 w-full outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-lg"
           />
           <p className="mt-2 text-center text-sm font-bold text-foreground">
             {years} año(s){simLoading ? ' · actualizando...' : ''}
@@ -304,13 +312,28 @@ export default function AdelantoPage() {
             Monto máximo disponible (MXN)
           </p>
           <p className="mt-1 text-3xl font-black tabular-nums tracking-tight text-foreground">
-            {formatMXN(maxAdvanceBusiness)}
+            <span className="sr-only">
+              Monto máximo disponible: {mxnToSpanishWords(maxAdvanceBusiness)}
+            </span>
+            <span aria-hidden="true">
+              {formatMXN(maxAdvanceBusiness)}
+            </span>
           </p>
         </div>
 
         <div className="space-y-3 pt-4 border-t border-border">
-          <SummaryRow label="Rendimiento neto a recibir" value={formatMXN(Math.max(0, (simulation?.net_to_user_mxn || 0) > 0 ? Math.min(simulation?.net_to_user_mxn || 0, maxAdvanceBusiness) : 0))} bold />
-          <SummaryRow label="Comisión al liquidar (1.5%)" value={formatMXN(simulation?.fee_mxn || 0)} dim />
+          <SummaryRow
+            label="Rendimiento neto a recibir"
+            value={formatMXN(Math.max(0, (simulation?.net_to_user_mxn || 0) > 0 ? Math.min(simulation?.net_to_user_mxn || 0, maxAdvanceBusiness) : 0))}
+            numericValue={Math.max(0, (simulation?.net_to_user_mxn || 0) > 0 ? Math.min(simulation?.net_to_user_mxn || 0, maxAdvanceBusiness) : 0)}
+            bold
+          />
+          <SummaryRow
+            label="Comisión al liquidar (1.5%)"
+            value={formatMXN(simulation?.fee_mxn || 0)}
+            numericValue={simulation?.fee_mxn || 0}
+            dim
+          />
           <SummaryRow label="Fecha de liberación ciclo" value={fechaLiberacion} dim />
         </div>
       </section>
@@ -388,25 +411,36 @@ function MiniStat({ label, value }: { label: string; value: string }) {
 function SummaryRow({
   label,
   value,
+  numericValue,
   dim,
   bold,
 }: {
   label: string
   value: string
+  numericValue?: number
   dim?: boolean
   bold?: boolean
 }) {
   return (
     <div className="flex items-center justify-between gap-4">
       <p className={cn('text-sm', dim ? 'text-muted-foreground' : 'text-muted-foreground/90')}>{label}</p>
-      <p
+      <div
         className={cn(
           'max-w-[58%] text-right text-sm tabular-nums',
           bold ? 'font-bold text-foreground' : dim ? 'text-muted-foreground' : 'font-semibold text-foreground',
         )}
       >
-        {value}
-      </p>
+        {numericValue !== undefined ? (
+          <>
+            <span className="sr-only">
+              {label}: {mxnToSpanishWords(numericValue)}
+            </span>
+            <span aria-hidden="true">{value}</span>
+          </>
+        ) : (
+          value
+        )}
+      </div>
     </div>
   )
 }
