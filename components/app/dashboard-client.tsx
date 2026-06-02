@@ -3,6 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Skeleton } from "@/components/ui/skeleton";
 import useSWR from "swr";
 import { animate, useMotionValue, useReducedMotion } from "framer-motion";
 import {
@@ -112,6 +114,7 @@ const advanceSimFetcher = (
   });
 
 export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
+  const t = useTranslations("dashboard");
   const { wallet, assetBalances, loading, refreshBalance } = useSeyfWallet();
   const [selected, setSelected] = useState<UserMovement | null>(null);
   const [hideBalances, setHideBalances] = useState(false);

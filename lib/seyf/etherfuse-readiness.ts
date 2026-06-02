@@ -70,12 +70,12 @@ export type EtherfuseReadinessInput = {
   customerId: string
   publicKey: string
   bankAccountId: string
-  source?: 'cookie' | 'mvp_env'
+  source?: 'cookie' | 'mvp_env' | 'wallet_lookup'
 }
 
 export type EtherfuseReadinessResult = {
   contextReady: boolean
-  contextSource: 'cookie' | 'mvp_env'
+  contextSource: 'cookie' | 'mvp_env' | 'wallet_lookup'
   customerId: string
   publicKey: string
   bankAccountId: string

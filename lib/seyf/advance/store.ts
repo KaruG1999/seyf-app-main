@@ -47,7 +47,7 @@ async function saveStore(store: AdvanceStore) {
   await writeFile(STORE_PATH, JSON.stringify(store, null, 2), 'utf-8')
 }
 
-export async function createAdvanceRecord(record: Omit<AdvanceRecord, 'id' | 'created_at' | 'status' | 'stellar_tx_hash'>): Promise<AdvanceRecord> {
+export async function createAdvanceRecord(record: Omit<AdvanceRecord, 'id' | 'created_at' | 'status' | 'stellar_tx_hash' | 'liquidated_at' | 'liquidation_fee_mxn'>): Promise<AdvanceRecord> {
   const store = await loadStore()
   const newRecord: AdvanceRecord = {
     ...record,

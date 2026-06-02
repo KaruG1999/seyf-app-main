@@ -108,7 +108,7 @@ export async function GET(request: Request) {
       kycStatus === 'approved' ||
       kycStatus === 'approved_chain_deploying' ||
       kycStatus === 'proposed' ||
-      kycStatus === 'compliant' // Etherfuse sandbox usa "compliant"
+      (kycStatus as string) === 'compliant' // Etherfuse sandbox usa "compliant"
 
     let etherfuseDepositClabe: string | null = null
     let bankAccountStatus: string | null = null
