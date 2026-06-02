@@ -90,6 +90,7 @@ const ThreeDMarquee = ({
           >
             {chunks.map((subarray, colIndex) => {
               const loop = [...subarray, ...subarray]
+              const goesDown = colIndex === 1
               const column = (
                 <motion.figure
                   className="flex flex-col items-start gap-3 sm:gap-4 md:gap-6"

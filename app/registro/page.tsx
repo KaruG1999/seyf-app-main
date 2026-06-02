@@ -3,10 +3,12 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 export default function RegistroPage() {
+  const t = useTranslations("auth.registro");
   const router = useRouter();
   const [form, setForm] = useState({
     nombre: "",

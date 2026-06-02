@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useTranslations } from "next-intl";
 import {
   Check,
   Copy,
@@ -80,12 +81,12 @@ function EmptyState({
   onCrear,
   creating,
   error,
-  t,
 }: {
   onCrear: () => void;
   creating: boolean;
   error: string | null;
 }) {
+  const t = useTranslations('components.clabeCard');
   return (
     <div className="flex flex-col items-center gap-5 px-2 py-4 text-center">
       <div className="flex size-14 items-center justify-center rounded-full bg-secondary/80 ring-1 ring-border">
@@ -130,6 +131,7 @@ function EmptyState({
 // ─── componente principal ─────────────────────────────────────────────────────
 
 export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
+  const t = useTranslations('components.clabeCard');
   const { wallet } = useSeyfWallet();
   const [clabe, setClabe] = useState<ClabeRecord | null>(initialClabe);
   const [copied, setCopied] = useState(false);
