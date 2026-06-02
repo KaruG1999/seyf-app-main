@@ -10,6 +10,7 @@ import { AppBackLink } from '@/components/app/app-back-link'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
+import { EmptyState } from '@/components/ui/empty-state'
 
 function formatMXN(amount: number) {
   return new Intl.NumberFormat('es-MX', {
@@ -191,6 +192,32 @@ export default function AdelantoPage() {
           </div>
         </div>
         <Skeleton className="h-12 rounded-full" />
+      </AppPageBody>
+    )
+  }
+
+  const alreadyUsedAdvance = useMemo(() => {
+    return simulation?.error === 'advance_already_used' || advances.some(a => (a as any).status === 'completed')
+  }, [simulation?.error, advances])
+
+  if (alreadyUsedAdvance) {
+    return (
+      <AppPageBody className="space-y-6 pt-2">
+        <AppBackLink href="/dashboard" />
+        <EmptyState
+          variant="full"
+          illustration="balance"
+          title="Ya utilizaste tu adelanto de este ciclo"
+          description="Tu liquidez está activa y trabajando. Podrás solicitar uno nuevo en tu siguiente ciclo."
+          primaryAction={{
+            label: "Volver al inicio",
+            onClick: () => router.push('/dashboard'),
+          }}
+          secondaryAction={{
+            label: "Ver tus adelantos",
+            onClick: () => router.push('/adelantos'),
+          }}
+        />
       </AppPageBody>
     )
   }
