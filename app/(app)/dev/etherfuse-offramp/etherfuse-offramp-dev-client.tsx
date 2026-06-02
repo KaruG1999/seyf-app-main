@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { AppBackLink } from '@/components/app/app-back-link'
 import { AppPageBody } from '@/components/app/app-page-body'
+import { useSeyfWallet } from '@/lib/seyf/use-seyf-wallet'
+import { EmptyState } from '@/components/ui/empty-state'
 import { OfframpActionCard } from '@/components/app/dev/offramp-action-card'
 import { OrderTransactionDetailCard, pickQuoteId } from '@/components/app/dev/etherfuse-order-cards'
 import {
@@ -37,10 +39,24 @@ type RampContextPayload = {
 }
 
 export default function EtherfuseOfframpDevClient() {
+  const { wallet, assetBalances, loading: walletLoading } = useSeyfWallet()
   const [busy, setBusy] = useState<string | null>(null)
   const [err, setErr] = useState<string | null>(null)
   const [sourceAmountTokens, setSourceAmountTokens] = useState('10')
   const [sourceAssetOverride, setSourceAssetOverride] = useState('')
+
+  const mxne = useMemo(() => {
+    const row = assetBalances.find((x) => (x.code ?? x.assetCode) === 'MXNE')
+    return row?.balance ? Number.parseFloat(row.balance) : 0
+  }, [assetBalances])
+
+  const cetes = useMemo(() => {
+    const row = assetBalances.find((x) => (x.code ?? x.assetCode) === 'CETES')
+    return row?.balance ? Number.parseFloat(row.balance) : 0
+  }, [assetBalances])
+
+  const totalBalance = mxne + cetes
+  const hasNoBalance = wallet && !walletLoading && totalBalance <= 0
   const [orderJson, setOrderJson] = useState<string>('')
   const [useAnchor, setUseAnchor] = useState(false)
   const [trackJson, setTrackJson] = useState<string>('')
@@ -392,6 +408,21 @@ export default function EtherfuseOfframpDevClient() {
               <Skeleton className="h-12 rounded-full" />
             </div>
           </>
+        ) : hasNoBalance ? (
+          <EmptyState
+            variant="full"
+            illustration="balance"
+            title="Sin saldo disponible"
+            description="No tienes fondos en tu cuenta para realizar un retiro SPEI en este momento."
+            primaryAction={{
+              label: "Agregar fondos",
+              href: "/anadir",
+            }}
+            secondaryAction={{
+              label: "Volver al inicio",
+              href: "/dashboard",
+            }}
+          />
         ) : (
           <>
             <WithdrawSpeiDestination
