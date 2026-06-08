@@ -89,6 +89,7 @@ const ThreeDMarquee = ({
             )}
           >
             {chunks.map((subarray, colIndex) => {
+              const goesDown = colIndex % 2 === 1
               const loop = [...subarray, ...subarray]
               const goesDown = colIndex === 1
               const column = (

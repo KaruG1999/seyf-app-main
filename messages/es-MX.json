@@ -198,6 +198,10 @@
   },
   "historial": {
     "stateBadge": "Estado de cuenta",
+    "hero": {
+      "badge": "Estado de cuenta",
+      "connectBtn": "Ir a conectar"
+    },
     "title": "Historial",
     "noWalletBody": "Conecta tu wallet para ver movimientos en cadena y por transferencia.",
     "body": "Pagos en cadena y movimientos por transferencia en un solo lugar.",

@@ -5,7 +5,6 @@ import { verifyEtherfuseWebhookSignature } from "@/lib/etherfuse/webhook-verify"
 import { pickRampOrderTransactionDetails } from "@/lib/etherfuse/orders-api";
 import { enqueueAutoDeployForDeposit } from "@/lib/seyf/spei-deposit-auto-deploy";
 import { upsertStoredKycSnapshot } from "@/lib/seyf/kyc-state-store";
-import { toErrorResponse } from "@/lib/seyf/api-error";
 
 export const runtime = "nodejs";
 
@@ -148,7 +147,11 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ ok: true });
-  } catch (e) {
-    return toErrorResponse(e, "webhooks/etherfuse");
+  } catch (error) {
+    console.error("[webhook etherfuse] Critical webhook error:", error);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500 }
+    );
   }
 }

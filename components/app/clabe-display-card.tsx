@@ -85,6 +85,7 @@ function EmptyState({
   onCrear: () => void;
   creating: boolean;
   error: string | null;
+  t: any;
 }) {
   const t = useTranslations('components.clabeCard');
   return (
@@ -131,7 +132,7 @@ function EmptyState({
 // ─── componente principal ─────────────────────────────────────────────────────
 
 export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
-  const t = useTranslations('components.clabeCard');
+  const t = useTranslations("components.clabeDisplay");
   const { wallet } = useSeyfWallet();
   const [clabe, setClabe] = useState<ClabeRecord | null>(initialClabe);
   const [copied, setCopied] = useState(false);
@@ -230,6 +231,7 @@ export function ClabeDisplayCard({ initialClabe = null, className }: Props) {
               onCrear={handleCrear}
               creating={isPending}
               error={error}
+              t={t}
             />
           ) : (
             <div className="space-y-5">

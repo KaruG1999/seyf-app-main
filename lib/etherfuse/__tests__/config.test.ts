@@ -86,7 +86,7 @@ describe("getEtherfuseConfig() — unit tests", () => {
   it("returns correct EtherfuseConfig shape when all required vars are present", () => {
     process.env.ETHERFUSE_API_KEY = "test-api-key";
     process.env.ETHERFUSE_API_BASE_URL = "https://api.example.com/";
-    process.env.NODE_ENV = "development";
+    (process.env as any).NODE_ENV = "development";
 
     const config = getEtherfuseConfig();
 
@@ -98,7 +98,7 @@ describe("getEtherfuseConfig() — unit tests", () => {
 
   it("throws when ETHERFUSE_WEBHOOK_SECRET is missing in production (Req 1.4)", () => {
     process.env.ETHERFUSE_API_KEY = "test-api-key";
-    process.env.NODE_ENV = "production";
+    (process.env as any).NODE_ENV = "production";
     process.env.VERCEL_ENV = "production";
     process.env.SEYF_ALLOW_ETHERFUSE_RAMP = "true";
     delete process.env.ETHERFUSE_WEBHOOK_SECRET;
@@ -108,7 +108,7 @@ describe("getEtherfuseConfig() — unit tests", () => {
 
   it("no exige ETHERFUSE_WEBHOOK_SECRET en Vercel preview aunque NODE_ENV sea production", () => {
     process.env.ETHERFUSE_API_KEY = "test-api-key";
-    process.env.NODE_ENV = "production";
+    (process.env as any).NODE_ENV = "production";
     process.env.VERCEL_ENV = "preview";
     delete process.env.ETHERFUSE_WEBHOOK_SECRET;
     process.env.SEYF_ALLOW_ETHERFUSE_RAMP = "false";
@@ -120,7 +120,7 @@ describe("getEtherfuseConfig() — unit tests", () => {
 
   it("throws when SEYF_ALLOW_ETHERFUSE_RAMP is not 'true' in production (Req 1.5)", () => {
     process.env.ETHERFUSE_API_KEY = "test-api-key";
-    process.env.NODE_ENV = "production";
+    (process.env as any).NODE_ENV = "production";
     process.env.VERCEL_ENV = "production";
     process.env.ETHERFUSE_WEBHOOK_SECRET = "secret";
     process.env.SEYF_ALLOW_ETHERFUSE_RAMP = "false";
@@ -130,7 +130,7 @@ describe("getEtherfuseConfig() — unit tests", () => {
 
   it("uses default baseUrl when ETHERFUSE_API_BASE_URL is not set", () => {
     process.env.ETHERFUSE_API_KEY = "test-api-key";
-    process.env.NODE_ENV = "development";
+    (process.env as any).NODE_ENV = "development";
     delete process.env.ETHERFUSE_API_BASE_URL;
 
     const config = getEtherfuseConfig();

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useSeyfWallet } from "@/lib/seyf/use-seyf-wallet";
 import { AppBackLink } from "@/components/app/app-back-link";
 import { AppPageBody } from "@/components/app/app-page-body";

@@ -45,36 +45,37 @@ export function buildSmsCopy<E extends NotificationEvent>(
   event: E,
   data: NotificationPayloadFor<E>,
 ): string {
+  const d = data as any
   switch (event) {
     case 'deposit_deployed': {
-      const amount = formatCurrencyMxn(data.amountMxn)
-      const instrument = data.instrumentLabel?.trim() || 'tu estrategia'
+      const amount = formatCurrencyMxn(d.amountMxn)
+      const instrument = d.instrumentLabel?.trim() || 'tu estrategia'
       return amount
         ? `Tu capital ya esta trabajando. Desplegamos ${amount} en ${instrument} y ya lo puedes seguir en Seyf.`
         : `Tu capital ya esta trabajando. Ya desplegamos tu deposito en ${instrument} y puedes seguirlo en Seyf.`
     }
     case 'advance_confirmed': {
-      const amount = formatCurrencyMxn(data.amountMxn)
+      const amount = formatCurrencyMxn(d.amountMxn)
       return amount
         ? `Tu adelanto por ${amount} ya quedo confirmado. Ya lo tienes listo para usar en Seyf.`
         : 'Tu adelanto ya quedo confirmado. Ya lo tienes listo para usar en Seyf.'
     }
     case 'withdrawal_completed': {
-      const amount = formatCurrencyMxn(data.amountMxn)
-      const destination = data.destinationLabel?.trim()
+      const amount = formatCurrencyMxn(d.amountMxn)
+      const destination = d.destinationLabel?.trim()
       return amount
         ? `Tu retiro por ${amount} ya quedo completado${destination ? ` hacia ${destination}` : ''}. Gracias por mover tu dinero con Seyf.`
         : `Tu retiro ya quedo completado${destination ? ` hacia ${destination}` : ''}. Gracias por mover tu dinero con Seyf.`
     }
     case 'withdrawal_failed': {
-      const amount = formatCurrencyMxn(data.amountMxn)
-      const reason = data.reason?.trim()
+      const amount = formatCurrencyMxn(d.amountMxn)
+      const reason = d.reason?.trim()
       return `${amount ? `No pudimos completar tu retiro por ${amount}.` : 'No pudimos completar tu retiro.'} Tu dinero sigue protegido.${reason ? ` Revisa: ${reason}.` : ''} Vuelve a intentarlo desde Seyf.`
     }
     case 'kyc_approved':
       return 'Tu cuenta Seyf ya quedo verificada. Ya puedes avanzar con tus movimientos con mas agilidad.'
     case 'kyc_rejected':
-      return `Tu verificacion necesita otro intento.${data.reason?.trim() ? ` Revisa: ${data.reason.trim()}.` : ''} Corrige tus datos y vuelve a intentarlo en Seyf.`
+      return `Tu verificacion necesita otro intento.${d.reason?.trim() ? ` Revisa: ${d.reason.trim()}.` : ''} Corrige tus datos y vuelve a intentarlo en Seyf.`
     default: {
       const exhaustive: never = event
       return exhaustive
