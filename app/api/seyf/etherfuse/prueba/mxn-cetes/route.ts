@@ -72,7 +72,7 @@ export async function POST(req: Request) {
 
   try {
     let identity: MvpPartnerRampIdentity;
-    let contextSource: "cookie" | "mvp_env";
+    let contextSource: "cookie" | "mvp_env" | "wallet_lookup";
 
     try {
       if (parsed.data.useMvpIdentity) {

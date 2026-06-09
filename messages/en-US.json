@@ -243,6 +243,10 @@
   },
   "historial": {
     "stateBadge": "[EN] Estado de cuenta",
+    "hero": {
+      "badge": "[EN] Estado de cuenta",
+      "connectBtn": "[EN] Ir a conectar"
+    },
     "title": "[EN] Historial",
     "noWalletBody": "[EN] Conecta tu wallet para ver movimientos en cadena y por transferencia.",
     "body": "[EN] Pagos en cadena y movimientos por transferencia en un solo lugar.",

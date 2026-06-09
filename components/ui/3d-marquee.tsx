@@ -89,6 +89,7 @@ const ThreeDMarquee = ({
             )}
           >
             {chunks.map((subarray, colIndex) => {
+              const goesDown = colIndex % 2 === 1
               const loop = [...subarray, ...subarray]
               // Check alternating column indexes to set scrolling direction
               const goesDown = colIndex % 2 === 1
