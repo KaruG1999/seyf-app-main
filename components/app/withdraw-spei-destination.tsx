@@ -257,29 +257,50 @@ export function WithdrawSpeiDestination({
 
             <div className="rounded-xl border border-dashed border-border bg-background/40 p-3 space-y-3">
               <p className="text-xs font-bold text-foreground">{t('registerContact')}</p>
-              <Input
-                placeholder={t('aliasPlaceholder')}
-                value={newLabel}
-                onChange={(e) => setNewLabel(e.target.value)}
-                className="rounded-xl"
-                disabled={disabled}
-              />
-              <Input
-                placeholder={t('beneficiaryPlaceholder')}
-                value={newBeneficiary}
-                onChange={(e) => setNewBeneficiary(e.target.value)}
-                className="rounded-xl"
-                disabled={disabled}
-              />
-              <Input
-                inputMode="numeric"
-                placeholder={t('clabePlaceholder')}
-                value={newClabe}
-                onChange={(e) => setNewClabe(normalizeClabeDigits(e.target.value))}
-                maxLength={18}
-                className="rounded-xl font-mono tabular-nums"
-                disabled={disabled}
-              />
+              
+              <div className="space-y-1">
+                <Label htmlFor="contact-alias" className="text-xs font-semibold text-muted-foreground">
+                  {t('aliasLabel')}
+                </Label>
+                <Input
+                  id="contact-alias"
+                  placeholder={t('aliasPlaceholder')}
+                  value={newLabel}
+                  onChange={(e) => setNewLabel(e.target.value)}
+                  className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  disabled={disabled}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="contact-beneficiary" className="text-xs font-semibold text-muted-foreground">
+                  {t('beneficiaryLabel')}
+                </Label>
+                <Input
+                  id="contact-beneficiary"
+                  placeholder={t('beneficiaryPlaceholder')}
+                  value={newBeneficiary}
+                  onChange={(e) => setNewBeneficiary(e.target.value)}
+                  className="rounded-xl focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  disabled={disabled}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="contact-clabe" className="text-xs font-semibold text-muted-foreground">
+                  {t('clabeLabel')}
+                </Label>
+                <Input
+                  id="contact-clabe"
+                  inputMode="numeric"
+                  placeholder={t('clabePlaceholder')}
+                  value={newClabe}
+                  onChange={(e) => setNewClabe(normalizeClabeDigits(e.target.value))}
+                  maxLength={18}
+                  className="rounded-xl font-mono tabular-nums focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  disabled={disabled}
+                />
+              </div>
               {formErr ? (
                 <p className="text-xs text-destructive">{formErr}</p>
               ) : null}

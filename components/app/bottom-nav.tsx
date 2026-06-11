@@ -31,7 +31,7 @@ export default function BottomNav() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex min-w-[4.5rem] flex-col items-center gap-1 rounded-full px-4 py-2 transition-colors',
+                'flex min-w-[4.5rem] flex-col items-center gap-1 rounded-full px-4 py-2 transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 isActive
                   ? 'bg-secondary text-foreground'
                   : 'text-muted-foreground hover:text-foreground',

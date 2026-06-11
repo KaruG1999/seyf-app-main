@@ -37,7 +37,7 @@ import {
   formatMovementListSubtitle,
   type UserMovement,
 } from "@/lib/seyf/user-movements-types";
-import { formatMXN, formatLoUltimoMonto } from "@/lib/formatters";
+import { formatMXN, formatLoUltimoMonto, mxnToSpanishWords } from "@/lib/formatters";
 import { cn } from "@/lib/utils";
 import type { EtherfuseKycSnapshot } from "@/lib/etherfuse/kyc";
 import { isPublicStellarTestnet } from "@/lib/seyf/stellar-wallet-network";
@@ -48,10 +48,10 @@ function formatMontoOculto() {
 
 function movementEstadoBadgeClass(estado: UserMovement["estado"]): string {
   if (estado === "completado")
-    return "bg-emerald-500/15 text-emerald-300 ring-emerald-500/25";
+    return "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 ring-emerald-500/25";
   if (estado === "fallido")
-    return "bg-rose-500/15 text-rose-300 ring-rose-500/25";
-  return "bg-amber-500/15 text-amber-200 ring-amber-500/25";
+    return "bg-rose-500/10 text-rose-700 dark:text-rose-300 ring-rose-500/25";
+  return "bg-amber-500/10 text-amber-800 dark:text-amber-200 ring-amber-500/25";
 }
 
 function formatMovementMeta(mov: UserMovement): string {
@@ -761,7 +761,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
           <button
             type="button"
             onClick={dismissReferralCard}
-            className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/25 bg-white/10 hover:bg-white/20"
+            className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/25 bg-white/10 hover:bg-white/20 outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-[#123b35]"
             aria-label="Cerrar invitación"
           >
             <X className="size-4" />
@@ -813,7 +813,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                   <button
                     type="button"
                     onClick={() => setSelected(mov)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2 py-3.5 text-left transition hover:bg-secondary/80"
+                    className="flex w-full items-center gap-3 rounded-xl px-2 py-3.5 text-left transition hover:bg-secondary/80 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground">
                       {iconForMovimientoTipo(mov.tipo)}
@@ -840,7 +840,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                     <span
                       className={cn(
                         "max-w-[42%] shrink-0 text-right text-sm font-bold tabular-nums",
-                        esPositivo ? "text-[#22C55E]" : "text-foreground",
+                        esPositivo ? "text-emerald-600 dark:text-emerald-400" : "text-foreground",
                       )}
                     >
                       {hideBalances
@@ -856,7 +856,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
         <div className="border-t border-border px-2 py-2">
           <Link
             href="/historial"
-            className="flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            className="flex w-full items-center justify-center rounded-xl py-2.5 text-sm font-semibold text-muted-foreground transition hover:bg-secondary hover:text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             {t('viewHistory')}
           </Link>
@@ -872,7 +872,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
             <div className="space-y-4">
               <Link
                 href="/historial"
-                className="flex items-center justify-between rounded-xl py-1 transition hover:opacity-90"
+                className="flex items-center justify-between rounded-xl py-1 transition hover:opacity-90 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <div>
                   <p className="text-sm font-bold text-foreground">
@@ -899,7 +899,16 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                     {t('principal')}
                   </p>
                   <p className="mt-1 text-base font-black tabular-nums text-foreground dark:text-white">
-                    {hideBalances ? formatMontoOculto() : formatMXN(mxne)}
+                    {hideBalances ? (
+                      formatMontoOculto()
+                    ) : (
+                      <>
+                        <span className="sr-only">
+                          Principal: {mxnToSpanishWords(mxne)}
+                        </span>
+                        <span aria-hidden="true">{formatMXN(mxne)}</span>
+                      </>
+                    )}
                   </p>
                 </div>
                 <div className="rounded-2xl border border-[#cad9d1] bg-white/70 p-3.5 ring-1 ring-[#dbe7e1] dark:border-[#2b4a43] dark:bg-white/10 dark:ring-white/10">
@@ -916,7 +925,14 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                     {hideBalances ? (
                       formatMontoOculto()
                     ) : (
-                      <RendimientoCounter value={data.rendimientoMxn} />
+                      <>
+                        <span className="sr-only">
+                          Rendimiento: {mxnToSpanishWords(data.rendimientoMxn)}
+                        </span>
+                        <span aria-hidden="true">
+                          <RendimientoCounter value={data.rendimientoMxn} />
+                        </span>
+                      </>
                     )}
                   </p>
                 </div>
@@ -928,7 +944,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
             <div className="space-y-4">
               <Link
                 href="/adelanto"
-                className="flex items-center justify-between rounded-xl py-1 transition hover:opacity-90"
+                className="flex items-center justify-between rounded-xl py-1 transition hover:opacity-90 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 <div>
                   <p className="text-sm font-bold text-foreground">
@@ -951,9 +967,18 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                   {t('adelantableLabel')}
                 </p>
                 <p className="mt-1 text-3xl font-black tracking-tight text-foreground dark:text-white">
-                  {hideBalances
-                    ? formatMontoOculto()
-                    : formatMXN(effectiveAdelantableMxn)}
+                  {hideBalances ? (
+                    formatMontoOculto()
+                  ) : (
+                    <>
+                      <span className="sr-only">
+                        Monto adelantable: {mxnToSpanishWords(effectiveAdelantableMxn)}
+                      </span>
+                      <span aria-hidden="true">
+                        {formatMXN(effectiveAdelantableMxn)}
+                      </span>
+                    </>
+                  )}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground dark:text-[#d2e9df]">
                   {effectiveAdelantableMxn > 0
@@ -977,7 +1002,14 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                     {hideBalances ? (
                       formatMontoOculto()
                     ) : (
-                      <RendimientoCounter value={data.rendimientoMxn} />
+                      <>
+                        <span className="sr-only">
+                          Rendimiento: {mxnToSpanishWords(data.rendimientoMxn)}
+                        </span>
+                        <span aria-hidden="true">
+                          <RendimientoCounter value={data.rendimientoMxn} />
+                        </span>
+                      </>
                     )}
                   </p>
                 </div>
@@ -1042,9 +1074,18 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
               Adelanto disponible
             </div>
             <p className="mt-2 text-3xl font-black tabular-nums tracking-tight text-foreground dark:text-white">
-              {hideBalances
-                ? formatMontoOculto()
-                : formatMXN(effectiveAdelantableMxn)}
+              {hideBalances ? (
+                formatMontoOculto()
+              ) : (
+                <>
+                  <span className="sr-only">
+                    Adelanto disponible: {mxnToSpanishWords(effectiveAdelantableMxn)}
+                  </span>
+                  <span aria-hidden="true">
+                    {formatMXN(effectiveAdelantableMxn)}
+                  </span>
+                </>
+              )}
             </p>
             <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground dark:text-[#d2e9df]">
               Recibe una parte de tu rendimiento hoy, sin retirar tu capital.
@@ -1096,9 +1137,18 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
               Saldo para gastar
             </p>
             <p className="text-xl font-black tabular-nums text-foreground">
-              {hideBalances
-                ? formatMontoOculto()
-                : formatMXN(data.saldoGastoMxn)}
+              {hideBalances ? (
+                formatMontoOculto()
+              ) : (
+                <>
+                  <span className="sr-only">
+                    Saldo para gastar: {mxnToSpanishWords(data.saldoGastoMxn)}
+                  </span>
+                  <span aria-hidden="true">
+                    {formatMXN(data.saldoGastoMxn)}
+                  </span>
+                </>
+              )}
             </p>
           </div>
           <Link href="/gastar">
@@ -1131,7 +1181,7 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
           </p>
           <Link
             href={kycBadge.href}
-            className="mt-2 inline-block text-xs font-bold text-[#5f7168] underline-offset-4 hover:underline dark:text-[#d2e9df]"
+            className="mt-2 inline-block text-xs font-bold text-[#5f7168] underline-offset-4 hover:underline dark:text-[#d2e9df] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
           >
             {kycBadge.action}
           </Link>

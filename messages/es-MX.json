@@ -179,12 +179,57 @@
     "checkDeposits": "Revisar depósitos",
     "legalNote": "El adelanto usa el rendimiento proyectado como respaldo y el tope de seguridad es 90% de tu capital. Al liquidar, se aplica una comisión del 1.5%.",
     "confirmLoading": "Confirmando operación…",
-    "confirmButton": "Confirmar adelanto ({years} año{plural})",
+    "confirmButton": "Confirmar adelanto ({count} año{plural})",
     "yourAdelantos": "Tus adelantos",
     "recordsCount": "{count} registro(s)",
     "noRecords": "Sin registros aún",
     "viewDetail": "Ver detalle completo",
     "footerNote": "Operación sujeta a validaciones de cuenta y disponibilidad.",
+    "confirming": "Confirmando operación…",
+    "maxAdvanceLabel": "Monto máximo disponible (MXN)",
+    "noteHtml": "<strong>Nota:</strong> El adelanto usa el rendimiento proyectado como respaldo y el tope de seguridad es 90% de tu capital. Al liquidar, se aplica una comisión del 1.5%.",
+    "hero": {
+      "badge": "Adelanto de rendimiento",
+      "title": "Obtén liquidez hoy",
+      "body": "Adelanta una parte de tu rendimiento proyectado sin esperar al vencimiento.",
+      "bold": "Tu saldo se mantiene protegido por reglas de bloqueo."
+    },
+    "stats": {
+      "baseMxn": "Capital base (MXN)",
+      "maxRatio": "Tope permitido",
+      "cetesApy": "Tasa CETES real (anual)",
+      "advanceApy": "Tasa de adelanto (anual)"
+    },
+    "yearsSlider": {
+      "label": "Años de rendimiento a adelantar (máx. por tope 90%: {max})",
+      "value": "{count} año(s)",
+      "updating": " · actualizando..."
+    },
+    "summary": {
+      "netLabel": "Rendimiento neto a recibir",
+      "feeLabel": "Comisión al liquidar (1.5%)",
+      "dateLabel": "Fecha de liberación ciclo"
+    },
+    "missingSteps": {
+      "title": "Faltan pasos para habilitar adelanto",
+      "btnVerify": "Completar verificación",
+      "btnDeposit": "Revisar depósitos"
+    },
+    "success": {
+      "badge": "Adelanto activado",
+      "title": "Listo",
+      "body": "Tu adelanto se acreditó correctamente.",
+      "receivedLabel": "Adelanto recibido",
+      "refLabel": "Referencia de operación",
+      "useButton": "Usar mi adelanto",
+      "backLink": "Volver al inicio"
+    },
+    "history": {
+      "title": "Tus adelantos",
+      "records": "{count} registro(s)",
+      "noRecords": "Sin registros aún",
+      "detailsButton": "Ver detalle completo"
+    },
     "errors": {
       "loadFailed": "No pudimos cargar tu información de adelanto.",
       "simFailed": "No pudimos actualizar la simulación.",
@@ -318,6 +363,9 @@
       "manageContacts": "Contactos guardados en este dispositivo",
       "noContacts": "Aún no tienes contactos guardados.",
       "registerContact": "Registrar contacto",
+      "aliasLabel": "Alias del contacto",
+      "beneficiaryLabel": "Titular de la cuenta (opcional)",
+      "clabeLabel": "CLABE (18 dígitos)",
       "aliasPlaceholder": "Alias (ej. Mi cuenta BBVA)",
       "beneficiaryPlaceholder": "Titular de la cuenta (opcional)",
       "clabePlaceholder": "CLABE (18 dígitos)",

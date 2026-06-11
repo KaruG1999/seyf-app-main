@@ -179,12 +179,57 @@
     "checkDeposits": "[EN] Revisar depósitos",
     "legalNote": "[EN] El adelanto usa el rendimiento proyectado como respaldo y el tope de seguridad es 90% de tu capital. Al liquidar, se aplica una comisión del 1.5%.",
     "confirmLoading": "[EN] Confirmando operación…",
-    "confirmButton": "[EN] Confirmar adelanto ({years} año{plural})",
+    "confirmButton": "[EN] Confirmar adelanto ({count} año{plural})",
     "yourAdelantos": "[EN] Tus adelantos",
     "recordsCount": "[EN] {count} registro(s)",
     "noRecords": "[EN] Sin registros aún",
     "viewDetail": "[EN] Ver detalle completo",
     "footerNote": "[EN] Operación sujeta a validaciones de cuenta y disponibilidad.",
+    "confirming": "[EN] Confirmando operación…",
+    "maxAdvanceLabel": "[EN] Monto máximo disponible (MXN)",
+    "noteHtml": "[EN] <strong>Nota:</strong> El adelanto usa el rendimiento proyectado como respaldo y el tope de seguridad es 90% de tu capital. Al liquidar, se aplica una comisión del 1.5%.",
+    "hero": {
+      "badge": "[EN] Adelanto de rendimiento",
+      "title": "[EN] Obtén liquidez hoy",
+      "body": "[EN] Adelanta una parte de tu rendimiento proyectado sin esperar al vencimiento.",
+      "bold": "[EN] Tu saldo se mantiene protegido por reglas de bloqueo."
+    },
+    "stats": {
+      "baseMxn": "[EN] Capital base (MXN)",
+      "maxRatio": "[EN] Tope permitido",
+      "cetesApy": "[EN] Tasa CETES real (anual)",
+      "advanceApy": "[EN] Tasa de adelanto (anual)"
+    },
+    "yearsSlider": {
+      "label": "[EN] Años de rendimiento a adelantar (máx. por tope 90%: {max})",
+      "value": "[EN] {count} año(s)",
+      "updating": "[EN]  · actualizando..."
+    },
+    "summary": {
+      "netLabel": "[EN] Rendimiento neto a recibir",
+      "feeLabel": "[EN] Comisión al liquidar (1.5%)",
+      "dateLabel": "[EN] Fecha de liberación ciclo"
+    },
+    "missingSteps": {
+      "title": "[EN] Faltan pasos para habilitar adelanto",
+      "btnVerify": "[EN] Completar verificación",
+      "btnDeposit": "[EN] Revisar depósitos"
+    },
+    "success": {
+      "badge": "[EN] Adelanto activado",
+      "title": "[EN] Listo",
+      "body": "[EN] Tu adelanto se acreditó correctamente.",
+      "receivedLabel": "[EN] Adelanto recibido",
+      "refLabel": "[EN] Referencia de operación",
+      "useButton": "[EN] Usar mi adelanto",
+      "backLink": "[EN] Volver al inicio"
+    },
+    "history": {
+      "title": "[EN] Tus adelantos",
+      "records": "[EN] {count} registro(s)",
+      "noRecords": "[EN] Sin registros aún",
+      "detailsButton": "[EN] Ver detalle completo"
+    },
     "errors": {
       "loadFailed": "[EN] No pudimos cargar tu información de adelanto.",
       "simFailed": "[EN] No pudimos actualizar la simulación.",
@@ -318,6 +363,9 @@
       "manageContacts": "[EN] Contactos guardados en este dispositivo",
       "noContacts": "[EN] Aún no tienes contactos guardados.",
       "registerContact": "[EN] Registrar contacto",
+      "aliasLabel": "[EN] Alias del contacto",
+      "beneficiaryLabel": "[EN] Titular de la cuenta (opcional)",
+      "clabeLabel": "[EN] CLABE (18 dígitos)",
       "aliasPlaceholder": "[EN] Alias (ej. Mi cuenta BBVA)",
       "beneficiaryPlaceholder": "[EN] Titular de la cuenta (opcional)",
       "clabePlaceholder": "[EN] CLABE (18 dígitos)",

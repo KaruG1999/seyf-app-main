@@ -3,7 +3,7 @@
 /**
  * @author: @emerald-ui
  * @description: A 3D marquee component that rotates images in a 3D space.
- * @version: 1.0.0
+ * @version: 1.0.1
  * @date: 2026-02-12
  * @license: MIT
  * @website: https://emerald-ui.com
@@ -91,6 +91,9 @@ const ThreeDMarquee = ({
             {chunks.map((subarray, colIndex) => {
               const goesDown = colIndex % 2 === 1
               const loop = [...subarray, ...subarray]
+              // Check alternating column indexes to set scrolling direction
+              const goesDown = colIndex % 2 === 1
+              
               const column = (
                 <motion.figure
                   className="flex flex-col items-start gap-3 sm:gap-4 md:gap-6"

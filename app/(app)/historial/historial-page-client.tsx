@@ -296,7 +296,7 @@ export default function HistorialPageClient() {
             type="button"
             onClick={() => setFiltro(f)}
             className={cn(
-              "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors",
+              "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
               filtro === f
                 ? "bg-foreground text-background"
                 : "bg-secondary text-muted-foreground ring-1 ring-border hover:text-foreground",
@@ -347,7 +347,7 @@ export default function HistorialPageClient() {
                 key={mov.id}
                 type="button"
                 onClick={() => setSelected(mov)}
-                className="flex w-full items-center justify-between rounded-[1.25rem] border border-border bg-card p-4 text-left transition hover:bg-secondary/80"
+                className="flex w-full items-center justify-between rounded-[1.25rem] border border-border bg-card p-4 text-left transition hover:bg-secondary/80 outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
                   <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-secondary text-foreground">
@@ -373,7 +373,7 @@ export default function HistorialPageClient() {
                   <p
                     className={cn(
                       "text-sm font-bold tabular-nums",
-                      esPositivo ? "text-emerald-400/90" : "text-foreground",
+                      esPositivo ? "text-emerald-600 dark:text-emerald-400" : "text-foreground",
                     )}
                   >
                     {formatHistorialMonto(mov)}
@@ -384,8 +384,8 @@ export default function HistorialPageClient() {
                       mov.estado === "completado"
                         ? "text-muted-foreground"
                         : mov.estado === "pendiente"
-                          ? "text-amber-300/90"
-                          : "text-red-400/90",
+                          ? "text-amber-800 dark:text-amber-300"
+                          : "text-destructive dark:text-red-400",
                     )}
                   >
                     {mov.estado.charAt(0).toUpperCase() + mov.estado.slice(1)}

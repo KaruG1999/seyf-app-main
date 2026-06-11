@@ -7,7 +7,7 @@ import { ArrowDownToLine, Clock, Info, Send } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import { formatMXN, formatPuntos, splitCurrencyForDisplay } from '@/lib/formatters'
+import { formatMXN, formatPuntos, splitCurrencyForDisplay, mxnToSpanishWords } from '@/lib/formatters'
 
 type HeroData = {
   principal: number
@@ -156,14 +156,19 @@ export function DashboardHeroCarousel({
               {data.isTestnet ? t('balanceLabel') : t('balanceLabelMainnet')}
             </p>
             <div className="mt-1 flex justify-center">
-              <p className="inline-flex flex-wrap items-baseline justify-center gap-0.5 leading-none tracking-tight text-foreground">
-                <span className="text-[2.35rem] font-black tabular-nums sm:text-[2.65rem]">{balanceMain}</span>
+              <div className="inline-flex flex-wrap items-baseline justify-center gap-0.5 leading-none tracking-tight text-foreground">
+                <span className="sr-only">
+                  {data.isTestnet ? 'Saldo total estimado' : 'Saldo disponible'}: {mxnToSpanishWords(data.principal)}
+                </span>
+                <span aria-hidden="true" className="text-[2.35rem] font-black tabular-nums sm:text-[2.65rem]">
+                  {balanceMain}
+                </span>
                 {balanceCents ? (
-                  <span className="text-[1.25rem] font-black tabular-nums text-muted-foreground sm:text-[1.4rem]">
+                  <span aria-hidden="true" className="text-[1.25rem] font-black tabular-nums text-muted-foreground sm:text-[1.4rem]">
                     {balanceCents}
                   </span>
                 ) : null}
-              </p>
+              </div>
             </div>
 
             {sb?.loading ? (
@@ -236,7 +241,7 @@ export function DashboardHeroCarousel({
                 <Link
                   key={label}
                   href={href}
-                  className="group flex flex-col items-center gap-2 rounded-xl py-1 transition active:scale-[0.97]"
+                  className="group flex flex-col items-center gap-2 rounded-xl py-1 transition active:scale-[0.97] outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   draggable={false}
                 >
                   <span className="flex h-[3.25rem] w-[3.25rem] items-center justify-center rounded-full bg-secondary/90 ring-1 ring-border transition group-hover:bg-secondary">
@@ -257,9 +262,14 @@ export function DashboardHeroCarousel({
             )}
           >
             <p className="text-[13px] font-medium text-muted-foreground">{t('adelantoLabel')}</p>
-            <p className="mt-1 text-[2.75rem] font-black leading-none tracking-tight tabular-nums text-foreground">
-              {formatMXN(data.adelantable)}
-            </p>
+            <div className="mt-1 text-[2.75rem] font-black leading-none tracking-tight tabular-nums text-foreground">
+              <span className="sr-only">
+                {t('adelantoLabel')}: {mxnToSpanishWords(data.adelantable)}
+              </span>
+              <span aria-hidden="true">
+                {formatMXN(data.adelantable)}
+              </span>
+            </div>
             {data.advanceUsed ? (
               <span className="mt-2 inline-block rounded-full border border-border bg-secondary/80 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
                 {t('adelantoUsed')}
@@ -269,7 +279,7 @@ export function DashboardHeroCarousel({
             )}
             <Link
               href="/adelanto"
-              className="mt-4 inline-block text-xs font-bold text-foreground underline-offset-4 hover:underline"
+              className="mt-4 inline-block text-xs font-bold text-foreground underline-offset-4 hover:underline outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded"
               onPointerDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
             >
@@ -296,7 +306,7 @@ export function DashboardHeroCarousel({
               type="button"
               onClick={() => snapTo(i)}
               className={cn(
-                'relative flex-1 rounded-full py-2 text-center text-xs font-bold transition-colors duration-200',
+                'relative flex-1 rounded-full py-2 text-center text-xs font-bold transition-colors duration-200 outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
                 index === i ? 'text-background' : 'text-muted-foreground hover:text-foreground',
               )}
             >

@@ -1,10 +1,10 @@
 'use client'
 
-import { useEffect, useState, type ReactNode } from 'react'
-import { useTranslations } from 'next-intl'
+import { useEffect, useState, useRef, type ReactNode } from 'react'
 import type { UserMovement } from '@/lib/seyf/user-movements-types'
 import { formatMovementFechaHora } from '@/lib/seyf/user-movements-types'
 import { stellarTxExplorerUrl } from '@/lib/etherfuse/stellar-tx-url'
+import { mxnToSpanishWords } from '@/lib/formatters'
 
 function txSigFromOrderPayload(data: unknown): string | null {
   if (!data || typeof data !== 'object') return null
@@ -49,6 +49,62 @@ export function MovementDetailSheet({
   const [resolvedSig, setResolvedSig] = useState<string | null>(null)
   const [txLoading, setTxLoading] = useState(false)
   const [txError, setTxError] = useState<string | null>(null)
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const previousActiveElementRef = useRef<HTMLElement | null>(null)
+
+  useEffect(() => {
+    if (movement) {
+      previousActiveElementRef.current = document.activeElement as HTMLElement
+      
+      const focusableElements = containerRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      if (focusableElements && focusableElements.length > 0) {
+        (focusableElements[0] as HTMLElement).focus()
+      } else {
+        containerRef.current?.focus()
+      }
+
+      document.body.style.overflow = 'hidden'
+    }
+
+    return () => {
+      document.body.style.overflow = ''
+      if (previousActiveElementRef.current) {
+        previousActiveElementRef.current.focus()
+      }
+    }
+  }, [movement])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      onClose()
+      return
+    }
+
+    if (e.key === 'Tab') {
+      const focusableElements = containerRef.current?.querySelectorAll(
+        'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+      if (!focusableElements || focusableElements.length === 0) return
+
+      const firstElement = focusableElements[0] as HTMLElement
+      const lastElement = focusableElements[focusableElements.length - 1] as HTMLElement
+
+      if (e.shiftKey) {
+        if (document.activeElement === firstElement) {
+          lastElement.focus()
+          e.preventDefault()
+        }
+      } else {
+        if (document.activeElement === lastElement) {
+          firstElement.focus()
+          e.preventDefault()
+        }
+      }
+    }
+  }
 
   useEffect(() => {
     setResolvedSig(null)
@@ -97,11 +153,13 @@ export function MovementDetailSheet({
     <div
       className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 backdrop-blur-sm"
       onClick={onClose}
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
+      onKeyDown={handleKeyDown}
       role="presentation"
     >
       <div
-        className="w-full max-w-lg rounded-t-[1.75rem] border border-border border-b-0 bg-popover p-6 pb-10"
+        ref={containerRef}
+        tabIndex={-1}
+        className="w-full max-w-lg rounded-t-[1.75rem] border border-border border-b-0 bg-popover p-6 pb-10 outline-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -122,7 +180,11 @@ export function MovementDetailSheet({
           </div>
         </div>
         <div className="mb-6 space-y-3">
-          <DetailRow label={t('amount')} value={formatMovementAmountLabel(movement)} />
+          <DetailRow
+            label={t('amount')}
+            value={formatMovementAmountLabel(movement)}
+            numericValue={movement.chainAssetCode ? undefined : movement.monto}
+          />
           <DetailRow
             label={t('status')}
             value={movement.estado.charAt(0).toUpperCase() + movement.estado.slice(1)}
@@ -136,7 +198,7 @@ export function MovementDetailSheet({
             {txLoading ? (
               <p className="text-xs text-muted-foreground">{t('loadingProof')}</p>
             ) : null}
-            {txError ? <p className="text-xs text-amber-600">{txError}</p> : null}
+            {txError ? <p className="text-xs text-amber-800 dark:text-amber-300 font-semibold">{txError}</p> : null}
             {stellarUrl ? (
               <a
                 href={stellarUrl}
@@ -162,6 +224,7 @@ export function MovementDetailSheet({
             ) : null}
           </div>
         </div>
+
         <button
           type="button"
           onClick={onClose}
@@ -177,20 +240,31 @@ export function MovementDetailSheet({
 function DetailRow({
   label,
   value,
+  numericValue,
   mono,
 }: {
   label: string
   value: string
+  numericValue?: number
   mono?: boolean
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
       <p className="shrink-0 text-sm text-muted-foreground">{label}</p>
-      <p
+      <div
         className={`text-right text-sm font-semibold text-foreground ${mono ? 'break-all font-mono text-xs' : ''}`}
       >
-        {value}
-      </p>
+        {numericValue !== undefined ? (
+          <>
+            <span className="sr-only">
+              {label}: {mxnToSpanishWords(numericValue)}
+            </span>
+            <span aria-hidden="true">{value}</span>
+          </>
+        ) : (
+          value
+        )}
+      </div>
     </div>
   )
 }

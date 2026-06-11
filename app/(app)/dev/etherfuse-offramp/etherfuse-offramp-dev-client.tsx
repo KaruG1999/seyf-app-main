@@ -11,7 +11,6 @@ import {
   type WithdrawDestinationSelection,
 } from '@/components/app/withdraw-spei-destination'
 import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -403,18 +402,21 @@ export default function EtherfuseOfframpDevClient() {
             />
 
             <section className="space-y-3 rounded-[1.5rem] border border-[#bfd6ca] bg-[#f4faf7] p-5 dark:border-border dark:bg-card/80">
-              <div>
-                <h2 className="text-base font-bold text-foreground">¿Cuánto quieres retirar?</h2>
-                <p className="mt-1 text-xs text-muted-foreground">
+              <div className="space-y-1">
+                <Label htmlFor="withdraw-amount-input" className="text-base font-bold text-foreground">
+                  ¿Cuánto quieres retirar?
+                </Label>
+                <p className="text-xs text-muted-foreground">
                   Cantidad del activo en tu wallet (el cotizador convierte a pesos para el SPEI).
                 </p>
               </div>
               <Input
+                id="withdraw-amount-input"
                 inputMode="decimal"
                 value={sourceAmountTokens}
                 onChange={(e) => setSourceAmountTokens(e.target.value)}
                 placeholder="Ej. 10"
-                className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold"
+                className="h-14 rounded-2xl border-[#c6dccf] bg-background px-4 text-lg tabular-nums font-semibold focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 aria-label="Cantidad del activo a retirar"
               />
               <details className="rounded-xl border border-border/60 bg-background/50 px-3 py-2 text-xs text-muted-foreground">
@@ -431,7 +433,7 @@ export default function EtherfuseOfframpDevClient() {
                       value={sourceAssetOverride}
                       onChange={(e) => setSourceAssetOverride(e.target.value)}
                       placeholder="Identificador del activo"
-                      className="mt-1 h-11 rounded-xl border-border bg-background px-3 font-mono text-xs"
+                      className="mt-1 h-11 rounded-xl border-border bg-background px-3 font-mono text-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       aria-label="Identificador de activo opcional"
                     />
                   </div>
