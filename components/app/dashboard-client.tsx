@@ -23,9 +23,7 @@ import { MovementDetailSheet } from "@/components/app/movement-detail-sheet";
 import { YieldTrendChart } from "@/components/app/yield-trend-chart";
 import { iconForMovimientoTipo } from "@/components/app/movement-tipo-icons";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useTranslations } from "next-intl";
 import { balanceForAssetCode } from "@/lib/seyf/accesly-balances";
 import { cetesBalanceEquivMxne } from "@/lib/seyf/cetes-mxne-equiv";
 import { cetesStablebondDisplayFromRow } from "@/lib/seyf/stablebond-cetes-display";
@@ -1112,10 +1110,10 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
                 </div>
               ))}
             </div>
-            {effectiveAdelantableMxn > 0 ? (
+            {effectiveAdelantableMxn > 0 || effectiveAdvanceUsed ? (
               <Link href="/adelanto" className="mt-4 block">
                 <Button className="h-12 w-full rounded-full text-base font-black">
-                  Pedir adelanto
+                  {effectiveAdvanceUsed ? 'Ver mi adelanto' : 'Pedir adelanto'}
                 </Button>
               </Link>
             ) : (
