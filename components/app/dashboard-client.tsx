@@ -558,25 +558,6 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
     );
   }
 
-  if (!wallet) {
-    return (
-      <AppPageBody className="space-y-4 pt-4">
-        <div className="rounded-[1.5rem] border border-border bg-card px-5 py-8 text-center">
-          <p className="text-sm font-bold text-foreground">{t('connectWallet')}</p>
-          <p className="mt-2 text-xs text-muted-foreground">
-            {t('connectWalletBody')}
-          </p>
-          <Button
-            asChild
-            className="mt-6 h-11 w-full max-w-xs rounded-full font-bold"
-          >
-            <Link href="/">Ir a conectar</Link>
-          </Button>
-        </div>
-      </AppPageBody>
-    );
-  }
-
   return (
     <AppPageBody className="space-y-6 pt-4">
       <section className="flex items-center justify-between rounded-2xl border border-border bg-card px-4 py-3">
@@ -1194,12 +1175,12 @@ export default function DashboardClient({ vm }: { vm: DashboardViewModel }) {
         <section className="relative overflow-hidden rounded-[1.6rem] border border-border bg-card p-5">
           <EmptyState
             variant="compact"
-            illustration="cycle"
-            title="Tu capital está listo para empezar a trabajar"
-            description="Abre tu primer ciclo de rendimiento en pesos invirtiendo en CETES de manera segura."
+            illustration="balance"
+            title={t('emptyStateTitle')}
+            description={t('emptyStateBody')}
             primaryAction={{
-              label: "Agregar fondos",
-              href: "/anadir",
+              label: t('emptyStateCta'),
+              href: "/depositar",
             }}
           />
         </section>
