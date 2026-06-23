@@ -9,7 +9,7 @@ export default defineConfig({
   test: {
     environment: "node",
     globals: false,
-    include: ["lib/etherfuse/__tests__/**/*.test.ts"],
+    include: ["lib/etherfuse/__tests__/**/*.test.ts", "lib/seyf/__tests__/**/*.test.ts"],
     exclude: ["node_modules/**"],
   },
   resolve: {
