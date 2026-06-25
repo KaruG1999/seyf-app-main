@@ -5,6 +5,9 @@ import { verifyEtherfuseWebhookSignature } from "@/lib/etherfuse/webhook-verify"
 import { pickRampOrderTransactionDetails } from "@/lib/etherfuse/orders-api";
 import { enqueueAutoDeployForDeposit } from "@/lib/seyf/spei-deposit-auto-deploy";
 import { upsertStoredKycSnapshot } from "@/lib/seyf/kyc-state-store";
+import { appendKycAuditEvent } from "@/lib/seyf/kyc-audit";
+import { logger } from "@/lib/observability/logger";
+import { withLogging } from "@/lib/observability/with-logging";
 
 export const runtime = "nodejs";
 
@@ -18,6 +21,24 @@ function pickString(obj: Record<string, unknown>, keys: string[]): string | null
     if (typeof value === "string" && value.trim()) return value.trim();
   }
   return null;
+}
+
+function maskValue(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (value.length <= 6) return `${value[0]}***`;
+  return `${value.slice(0, 3)}***${value.slice(-2)}`;
+}
+
+function summarizePayloadForLogs(payload: unknown) {
+  const root = asObject(payload) ?? {};
+  const data = asObject(root.data) ?? asObject(root.payload) ?? root;
+
+  return {
+    eventType: pickString(root, ["event", "eventType", "type", "name"]),
+    customerId: maskValue(pickString(data, ["customerId", "customer_id"])),
+    walletPublicKey: maskValue(pickString(data, ["walletPublicKey", "wallet_public_key", "pubkey", "publicKey"])),
+    status: pickString(data, ["status"]),
+  };
 }
 
 function isKycStatus(value: string): value is EtherfuseKycStatus {
@@ -69,89 +90,95 @@ function extractKycUpdateEvent(payload: unknown): {
  *
  * @see https://docs.etherfuse.com/guides/verifying-webhooks
  */
-export async function POST(req: Request) {
+async function handlePost(req: Request, _context: { params: Promise<Record<string, string | string[]>> }) {
+  const raw = await req.text();
+  let payload: unknown;
   try {
-    const raw = await req.text();
-    let payload: unknown;
+    payload = JSON.parse(raw) as unknown;
+  } catch {
+    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  }
+
+  const { webhookSecret: secret } = getEtherfuseConfig();
+  const sig = req.headers.get("x-signature");
+
+  if (secret) {
+    if (!verifyEtherfuseWebhookSignature(payload, sig, secret)) {
+      return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
+    }
+  } else if (strictEtherfuseProductionConfig()) {
+    return NextResponse.json(
+      { error: "ETHERFUSE_WEBHOOK_SECRET no configurado" },
+      { status: 503 },
+    );
+  }
+
+  logger.debug(
+    { route: "webhooks/etherfuse", payload: summarizePayloadForLogs(payload) },
+    "Etherfuse webhook received",
+  );
+
+  const kyc = extractKycUpdateEvent(payload);
+  const isKycUpdated =
+    kyc.eventType === "kyc_updated" ||
+    (kyc.eventType && kyc.eventType.toLowerCase().includes("kyc"));
+  if (isKycUpdated && kyc.customerId && kyc.walletPublicKey && kyc.status) {
+    const result = await upsertStoredKycSnapshot({
+      customerId: kyc.customerId,
+      walletPublicKey: kyc.walletPublicKey,
+      status: kyc.status,
+      approvedAt: kyc.approvedAt,
+      currentRejectionReason: kyc.currentRejectionReason,
+      eventId: kyc.eventId,
+      eventTimestamp: kyc.eventTimestamp,
+    });
     try {
-      payload = JSON.parse(raw) as unknown;
-    } catch {
-      return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
-    }
-
-    const { webhookSecret: secret } = getEtherfuseConfig();
-    const sig = req.headers.get("x-signature");
-
-    if (secret) {
-      if (!verifyEtherfuseWebhookSignature(payload, sig, secret)) {
-        return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
-      }
-    } else if (strictEtherfuseProductionConfig()) {
-      return NextResponse.json(
-        { error: "ETHERFUSE_WEBHOOK_SECRET no configurado" },
-        { status: 503 },
-      );
-    }
-
-    if (process.env.NODE_ENV !== "production") {
-      console.info(
-        "[webhook etherfuse]",
-        typeof payload === "object" && payload !== null
-          ? JSON.stringify(payload).slice(0, 2500)
-          : String(payload),
-      );
-    }
-
-    const kyc = extractKycUpdateEvent(payload);
-    const isKycUpdated =
-      kyc.eventType === "kyc_updated" ||
-      (kyc.eventType && kyc.eventType.toLowerCase().includes("kyc"));
-    if (isKycUpdated && kyc.customerId && kyc.walletPublicKey && kyc.status) {
-      const result = await upsertStoredKycSnapshot({
+      await appendKycAuditEvent({
+        event: "update",
         customerId: kyc.customerId,
         walletPublicKey: kyc.walletPublicKey,
         status: kyc.status,
-        approvedAt: kyc.approvedAt,
-        currentRejectionReason: kyc.currentRejectionReason,
         eventId: kyc.eventId,
-        eventTimestamp: kyc.eventTimestamp,
       });
-      if (process.env.NODE_ENV !== "production") {
-        console.info("[webhook etherfuse] kyc_updated processed", {
-          customerId: kyc.customerId,
-          walletPublicKey: `${kyc.walletPublicKey.slice(0, 6)}...${kyc.walletPublicKey.slice(-6)}`,
-          status: kyc.status,
-          updated: result.updated,
-        });
-      }
+    } catch (auditError) {
+      logger.warn(
+        { route: "webhooks/etherfuse/kyc", error: auditError instanceof Error ? auditError.message : String(auditError) },
+        "KYC audit event write failed",
+      );
     }
-
-    try {
-      const details = pickRampOrderTransactionDetails(payload);
-      const isOnramp = (details.orderType ?? "").toLowerCase() === "onramp";
-      const isConfirmed = (details.status ?? "").toLowerCase() === "confirmed";
-
-      if (isOnramp && isConfirmed && details.orderId) {
-        void enqueueAutoDeployForDeposit({
-          depositId: details.orderId,
-          amountMxn:
-            details.amountInFiat && Number.isFinite(Number(details.amountInFiat))
-              ? Number(details.amountInFiat)
-              : null,
-        }).catch((error) => {
-          console.error("[webhook etherfuse] enqueueAutoDeployForDeposit failed", error);
-        });
-      }
-    } catch (error) {
-      console.error("[webhook etherfuse] handler error", error);
-    }
-
-    return NextResponse.json({ ok: true });
-  } catch (error) {
-    console.error("[webhook etherfuse] Critical webhook error:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
+    logger.info(
+      { route: "webhooks/etherfuse/kyc", customerId: kyc.customerId, status: kyc.status, updated: result.updated },
+      `KYC update processed: ${kyc.status}`,
     );
   }
+
+  try {
+    const details = pickRampOrderTransactionDetails(payload);
+    const isOnramp = (details.orderType ?? "").toLowerCase() === "onramp";
+    const isConfirmed = (details.status ?? "").toLowerCase() === "confirmed";
+
+    if (isOnramp && isConfirmed && details.orderId) {
+      void enqueueAutoDeployForDeposit({
+        depositId: details.orderId,
+        amountMxn:
+          details.amountInFiat && Number.isFinite(Number(details.amountInFiat))
+            ? Number(details.amountInFiat)
+            : null,
+      }).catch((error) => {
+        logger.error(
+          { route: "webhooks/etherfuse/deploy", error: error instanceof Error ? error.message : String(error) },
+          "enqueueAutoDeployForDeposit failed",
+        );
+      });
+    }
+  } catch (error) {
+    logger.error(
+      { route: "webhooks/etherfuse/handler", error: error instanceof Error ? error.message : String(error) },
+      "Webhook handler error",
+    );
+  }
+
+  return NextResponse.json({ ok: true });
 }
+
+export const POST = withLogging(handlePost, { routeName: "webhooks/etherfuse", provider: "etherfuse" });

@@ -26,6 +26,7 @@ import {
   getTestnetSyntheticClabe,
 } from '@/lib/seyf/etherfuse-testnet-bank-autofill'
 import { createCustomerBankAccount } from '@/lib/etherfuse/bank-accounts'
+import { appendKycAuditEvent } from '@/lib/seyf/kyc-audit'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -160,6 +161,7 @@ export async function POST(req: Request) {
       normalizeStellarPublicKey(existing.publicKey) === publicKey &&
       !!existing.customerId &&
       !!existing.bankAccountId
+    const auditEvent = hasMatchingSession ? 'resubmit' : 'submit'
 
     await saveEtherfuseOnboardingSession({
       customerId: ids.customerId,
@@ -340,30 +342,12 @@ export async function POST(req: Request) {
       }
     }
 
-    // Persist business data to local PostgreSQL (non-fatal — KYC submission already succeeded)
-    if (isDatabaseConfigured() && parsed.data.businessData) {
-      const email = parsed.data.identity.email?.trim()
-      if (email) {
-        try {
-          await query(
-            `WITH u AS (
-               INSERT INTO users (id, email)
-               VALUES (gen_random_uuid(), $1)
-               ON CONFLICT (email) DO UPDATE SET updated_at = now()
-               RETURNING id
-             )
-             INSERT INTO kyc_submissions (user_id, status, provider_reference, metadata)
-             SELECT id, 'submitted', $2, $3::jsonb FROM u`,
-            [email, resolvedCustomerId, JSON.stringify(parsed.data.businessData)],
-          )
-        } catch (dbErr) {
-          console.warn(
-            '[kyc/submit] business data DB write failed (non-fatal):',
-            dbErr instanceof Error ? dbErr.message : dbErr,
-          )
-        }
-      }
-    }
+    await appendKycAuditEvent({
+      event: auditEvent,
+      customerId: resolvedCustomerId,
+      walletPublicKey: publicKey,
+      status: submission?.status ?? null,
+    })
 
     return NextResponse.json(
       {
@@ -378,15 +362,20 @@ export async function POST(req: Request) {
     )
   } catch (e) {
     const base = toErrorResponse(e, 'kyc/submit')
-    // Always include debug_message so Vercel logs + client console show the exact failure
-    const body = (await base.json()) as { error?: unknown }
-    const debugMsg = e instanceof Error ? e.message : String(e)
-    return NextResponse.json(
-      {
-        ...(typeof body === 'object' && body ? body : {}),
-        debug_message: debugMsg,
-      },
-      { status: base.status, headers: { 'Cache-Control': 'no-store' } },
-    )
+    const body = (await base.json().catch(() => ({}))) as { error?: unknown }
+    if (process.env.NODE_ENV !== 'production' && process.env.SEYF_API_DEBUG_ERRORS === 'true') {
+      const debugMsg = e instanceof Error ? e.message : String(e)
+      return NextResponse.json(
+        {
+          ...(typeof body === 'object' && body ? body : {}),
+          debug_message: debugMsg,
+        },
+        { status: base.status, headers: { 'Cache-Control': 'no-store' } },
+      )
+    }
+    return NextResponse.json(body, {
+      status: base.status,
+      headers: { 'Cache-Control': 'no-store' },
+    })
   }
 }
